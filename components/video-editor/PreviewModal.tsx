@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { X, Play, Pause, Volume2, VolumeX, Maximize2 } from 'lucide-react';
-import { VideoFormat, SubtitleChunk } from '@/types/editor';
+import { VideoFormat, SubtitleChunk, Layer } from '@/types/editor';
 
 const FORMAT_RATIO: Record<VideoFormat, number> = {
   '16:9': 16 / 9,
@@ -17,6 +17,7 @@ interface PreviewModalProps {
   trimStart: number;
   trimEnd: number;
   onClose: () => void;
+  layers?: Layer[];
 }
 
 function formatTime(s: number): string {
@@ -31,6 +32,7 @@ export default function PreviewModal({
   trimStart,
   trimEnd,
   onClose,
+  layers = [],
 }: PreviewModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
@@ -142,9 +144,62 @@ export default function PreviewModal({
             onClick={togglePlay}
           />
 
+          {/* Canvas Layers Overlay */}
+          {layers && layers.map((layer) => (
+            <div
+              key={layer.id}
+              className="absolute pointer-events-none select-none"
+              style={{
+                left: `${layer.x}%`,
+                top: `${layer.y}%`,
+                width: `${layer.width}%`,
+                height: `${layer.height}%`,
+                zIndex: layer.zIndex,
+              }}
+            >
+              <div className="w-full h-full relative overflow-hidden flex items-center justify-center">
+                {layer.type === 'text' && (
+                  <div
+                    className="w-full h-full flex items-center justify-center text-center px-1"
+                    style={{ backgroundColor: layer.bgColor || '#00000000' }}
+                  >
+                    <p
+                      className="font-bold w-full break-words leading-normal"
+                      style={{
+                        fontSize: `${(layer.fontSize || 20) * 0.85}px`,
+                        color: layer.color || '#ffffff',
+                      }}
+                    >
+                      {layer.text || ''}
+                    </p>
+                  </div>
+                )}
+
+                {layer.type === 'image' && layer.src && (
+                  <img
+                    src={layer.src}
+                    alt={layer.name}
+                    className="w-full h-full object-contain"
+                  />
+                )}
+
+                {layer.type === 'video' && layer.src && (
+                  <video
+                    src={layer.src}
+                    className="w-full h-full object-contain"
+                    muted
+                    loop
+                    autoPlay
+                    playsInline
+                  />
+                )}
+              </div>
+            </div>
+          ))}
+
           {/* Subtitle overlay */}
           {activeSub && (
-            <div className="absolute bottom-6 left-0 right-0 flex justify-center px-6 pointer-events-none">
+            <div className="absolute bottom-6 left-0 right-0 flex justify-center px-6 pointer-events-none" style={{ zIndex: 9999 }}>
               <div className="bg-black/70 text-white text-sm font-bold px-4 py-2 rounded-xl text-center max-w-full shadow-lg">
                 {activeSub.text}
               </div>
@@ -153,7 +208,7 @@ export default function PreviewModal({
 
           {/* Center play/pause icon (brief flash) */}
           {!playing && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 9999 }}>
               <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center">
                 <Play size={28} className="text-white ml-1" />
               </div>

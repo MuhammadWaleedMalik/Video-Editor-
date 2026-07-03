@@ -1,14 +1,12 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { EditorState, SubtitleChunk, SplitPoint, SmartTrimSegment, VideoFormat, Layer, ImageLayer, TextLayer, AudioLayer, TrimSegment } from '@/types/editor';
+import { EditorState, SubtitleChunk, SplitPoint, SmartTrimSegment, VideoFormat, Layer } from '@/types/editor';
 import EditorHeader from './EditorHeader';
 import LeftSidebar from './LeftSidebar';
 import VideoPreview from './VideoPreview';
 import AIToolsPanel from './AIToolsPanel';
 import SubtitlesPanel from './SubtitlesPanel';
-import LayersPanel from './LayersPanel';
-import SegmentsPanel from './SegmentsPanel';
 import Timeline from './Timeline';
 import VideoUpload from './VideoUpload';
 import PreviewModal from './PreviewModal';
@@ -16,14 +14,11 @@ import PreviewModal from './PreviewModal';
 const initialState: EditorState = {
   videoFile: null,
   videoUrl: null,
-  audioUrl: null,
-  audioBlob: null,
   duration: 0,
   currentTime: 0,
   isPlaying: false,
   trimStart: 0,
   trimEnd: 0,
-  trimSegments: [],
   splitPoints: [],
   subtitles: [],
   hasAudio: false,
@@ -36,6 +31,7 @@ const initialState: EditorState = {
   layers: [],
   selectedLayerId: null,
 };
+
 
 async function extractWaveform(url: string): Promise<Float32Array | null> {
   try {
@@ -116,7 +112,6 @@ export default function VideoEditor() {
   const [title, setTitle] = useState('My Video — Draft');
   const [waveformData, setWaveformData] = useState<Float32Array | null>(null);
   const [showPreview, setShowPreview] = useState(false);
-  const [rightPanel, setRightPanel] = useState<'segments' | 'layers'>('segments');
   const videoRef = useRef<HTMLVideoElement>(null);
 
   const set = useCallback((patch: Partial<EditorState>) => {
@@ -128,24 +123,14 @@ export default function VideoEditor() {
     if (state.videoUrl) URL.revokeObjectURL(state.videoUrl);
     const url = URL.createObjectURL(file);
     setWaveformData(null);
-    
-    // Create initial trim segment (keep full video/audio by default)
-    const initialTrimSegment: TrimSegment = {
-      id: crypto.randomUUID(),
-      startTime: 0,
-      endTime: 0, // Will be set when duration is available
-      trackType: 'both',
-    };
-
     set({
       videoFile: file,
       videoUrl: url,
-      audioUrl: url, // Same URL contains audio
-      audioBlob: null,
       isPlaying: false,
       currentTime: 0,
       duration: 0,
-      trimSegments: [initialTrimSegment],
+      trimStart: 0,
+      trimEnd: 0,
       splitPoints: [],
       hasAudio: true,
       audioMuted: false,
@@ -163,41 +148,23 @@ export default function VideoEditor() {
       v.pause();
       set({ isPlaying: false });
     } else {
-      const firstSegment = state.trimSegments[0];
-      if (firstSegment && v.currentTime < firstSegment.startTime) {
-        v.currentTime = firstSegment.startTime;
-      }
+      if (state.trimStart > 0 && v.currentTime < state.trimStart) v.currentTime = state.trimStart;
       v.play();
       set({ isPlaying: true });
     }
   }
 
   function handleTimeUpdate(time: number) {
-    // Check if time exceeds any trim segment end
-    let shouldStop = false;
-    for (const segment of state.trimSegments) {
-      if (time >= segment.endTime && segment.endTime > 0) {
-        shouldStop = true;
-        break;
-      }
-    }
-    
-    if (shouldStop) {
+    if (state.trimEnd > 0 && time >= state.trimEnd) {
       videoRef.current?.pause();
-      set({ isPlaying: false, currentTime: time });
+      set({ isPlaying: false, currentTime: state.trimEnd });
       return;
     }
     set({ currentTime: time });
   }
 
   function handleDurationChange(duration: number) {
-    // Update initial trim segment to full duration
-    set({
-      duration,
-      trimSegments: state.trimSegments.map((seg) =>
-        seg.id === state.trimSegments[0]?.id ? { ...seg, endTime: duration } : seg
-      ),
-    });
+    set({ duration, trimEnd: duration });
   }
 
   function handleSeek(time: number) {
@@ -223,9 +190,13 @@ export default function VideoEditor() {
 
   /* ── AI tools ── */
   async function handleNoiseRemove(): Promise<void> {
-    // Simulate 1.8 s processing
-    await new Promise((r) => setTimeout(r, 1800));
-    set({ noiseRemoveApplied: true });
+    if (state.noiseRemoveApplied) {
+      set({ noiseRemoveApplied: false });
+    } else {
+      // Simulate 1.8 s processing
+      await new Promise((r) => setTimeout(r, 1800));
+      set({ noiseRemoveApplied: true });
+    }
   }
 
   async function handleSmartTrim(): Promise<void> {
@@ -240,6 +211,85 @@ export default function VideoEditor() {
       smartTrimSegments: result.segments,
     });
     if (videoRef.current) videoRef.current.currentTime = result.trimStart;
+  }
+
+  /* ── Canvas Layers ── */
+  function createDefaultLayer(type: 'image' | 'video' | 'text', count: number, x = 30, y = 30): Layer {
+    const id = crypto.randomUUID();
+    switch (type) {
+      case 'text':
+        return {
+          id,
+          type,
+          x,
+          y,
+          width: 40,
+          height: 12,
+          zIndex: count + 1,
+          name: `Text ${count + 1}`,
+          text: 'Double click to edit text',
+          fontSize: 20,
+          color: '#ffffff',
+          bgColor: '#00000000',
+        };
+      case 'image':
+        return {
+          id,
+          type,
+          x,
+          y,
+          width: 35,
+          height: 35,
+          zIndex: count + 1,
+          name: `Image ${count + 1}`,
+          src: '', // empty for placeholder
+        };
+      case 'video':
+        return {
+          id,
+          type,
+          x,
+          y,
+          width: 40,
+          height: 40,
+          zIndex: count + 1,
+          name: `Video ${count + 1}`,
+          src: '', // empty for placeholder
+        };
+    }
+  }
+
+  function handleAddLayer(type: 'image' | 'video' | 'text') {
+    const newLayer = createDefaultLayer(type, state.layers.length);
+    set({
+      layers: [...state.layers, newLayer],
+      selectedLayerId: newLayer.id,
+    });
+  }
+
+  function handleAddLayerAtCoords(type: 'image' | 'video' | 'text', x: number, y: number) {
+    const newLayer = createDefaultLayer(type, state.layers.length, x, y);
+    set({
+      layers: [...state.layers, newLayer],
+      selectedLayerId: newLayer.id,
+    });
+  }
+
+  function handleUpdateLayer(updated: Layer) {
+    set({
+      layers: state.layers.map((l) => (l.id === updated.id ? updated : l)),
+    });
+  }
+
+  function handleDeleteLayer(id: string) {
+    set({
+      layers: state.layers.filter((l) => l.id !== id),
+      selectedLayerId: state.selectedLayerId === id ? null : state.selectedLayerId,
+    });
+  }
+
+  function handleSelectLayer(id: string | null) {
+    set({ selectedLayerId: id });
   }
 
   /* ── Subtitles ── */
@@ -259,157 +309,6 @@ export default function VideoEditor() {
     setWaveformData(null);
   }
 
-  /* ── Trim Segments ── */
-  function handleAddTrimSegment(startTime: number, endTime: number, trackType: 'video' | 'audio' | 'both' = 'both') {
-    const newSegment: TrimSegment = {
-      id: crypto.randomUUID(),
-      startTime,
-      endTime,
-      trackType,
-    };
-    set({
-      trimSegments: [...state.trimSegments, newSegment],
-    });
-  }
-
-  function handleUpdateTrimSegment(segmentId: string, updates: Partial<TrimSegment>) {
-    set({
-      trimSegments: state.trimSegments.map((seg) =>
-        seg.id === segmentId ? { ...seg, ...updates } : seg
-      ),
-    });
-  }
-
-  function handleDeleteTrimSegment(segmentId: string) {
-    set({
-      trimSegments: state.trimSegments.filter((seg) => seg.id !== segmentId),
-    });
-  }
-
-  function handleTrimSegmentsFromSmartTrim() {
-    if (!state.duration || state.smartTrimSegments.length === 0) return;
-    
-    // Create trim segments from smart trim results
-    const newSegments: TrimSegment[] = state.smartTrimSegments
-      .filter(seg => seg.keep)
-      .map(seg => ({
-        id: crypto.randomUUID(),
-        startTime: seg.startTime,
-        endTime: seg.endTime,
-        trackType: 'both' as const,
-      }));
-    
-    set({ trimSegments: newSegments });
-  }
-
-  /* ── Layers ── */
-  function handleAddImageLayer() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = (e: Event) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      const url = URL.createObjectURL(file);
-      const newLayer: ImageLayer = {
-        id: crypto.randomUUID(),
-        type: 'image',
-        src: url,
-        x: 50,
-        y: 50,
-        width: 200,
-        height: 150,
-        opacity: 1,
-        zIndex: state.layers.length,
-        startTime: state.currentTime,
-        endTime: Math.min(state.currentTime + 5, state.duration),
-        borderRadius: 0,
-        borderWidth: 0,
-        borderColor: '#000000',
-        scale: 1,
-        rotation: 0,
-      };
-      set({
-        layers: [...state.layers, newLayer],
-        selectedLayerId: newLayer.id,
-      });
-    };
-    input.click();
-  }
-
-  function handleAddTextLayer() {
-    const newLayer: TextLayer = {
-      id: crypto.randomUUID(),
-      type: 'text',
-      text: 'New Text',
-      x: 100,
-      y: 100,
-      width: 300,
-      height: 80,
-      fontSize: 24,
-      color: '#ffffff',
-      fontFamily: 'Arial',
-      opacity: 1,
-      zIndex: state.layers.length,
-      startTime: state.currentTime,
-      endTime: Math.min(state.currentTime + 5, state.duration),
-      backgroundColor: '#000000',
-      backgroundOpacity: 0.5,
-      padding: 8,
-      borderRadius: 4,
-      textAlign: 'center',
-      fontWeight: 'normal',
-    };
-    set({
-      layers: [...state.layers, newLayer],
-      selectedLayerId: newLayer.id,
-    });
-  }
-
-  function handleAddAudioLayer() {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = 'audio/*';
-    input.onchange = (e: Event) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (!file) return;
-      const url = URL.createObjectURL(file);
-      const newLayer: AudioLayer = {
-        id: crypto.randomUUID(),
-        type: 'audio',
-        src: url,
-        volume: 1,
-        startTime: state.currentTime,
-        endTime: Math.min(state.currentTime + 5, state.duration),
-        zIndex: state.layers.length,
-      };
-      set({
-        layers: [...state.layers, newLayer],
-        selectedLayerId: newLayer.id,
-      });
-    };
-    input.click();
-  }
-
-  function handleUpdateLayer(layerId: string, updates: Partial<Layer>) {
-    set({
-      layers: state.layers.map((layer) =>
-        layer.id === layerId ? { ...layer, ...updates } as Layer : layer
-      ),
-    });
-  }
-
-  function handleDeleteLayer(layerId: string) {
-    set({
-      layers: state.layers.filter((layer) => layer.id !== layerId),
-      selectedLayerId: state.selectedLayerId === layerId ? null : state.selectedLayerId,
-    });
-  }
-
-  function handleSelectLayer(layerId: string | null) {
-    set({ selectedLayerId: layerId });
-  }
-
   const hasVideo = !!state.videoUrl;
 
   return (
@@ -424,9 +323,11 @@ export default function VideoEditor() {
 
       <div className="flex flex-1 overflow-hidden min-h-0">
         <LeftSidebar
-          onAddImage={handleAddImageLayer}
-          onAddText={handleAddTextLayer}
-          onAddAudio={handleAddAudioLayer}
+          layers={state.layers}
+          selectedLayerId={state.selectedLayerId}
+          onSelectLayer={handleSelectLayer}
+          onAddLayer={handleAddLayer}
+          onDeleteLayer={handleDeleteLayer}
         />
 
         {hasVideo ? (
@@ -453,14 +354,15 @@ export default function VideoEditor() {
                 noiseRemoveApplied={state.noiseRemoveApplied}
                 subtitles={state.subtitles}
                 format={state.format}
-                layers={state.layers}
-                selectedLayerId={state.selectedLayerId}
                 onPlayPause={handlePlayPause}
                 onTimeUpdate={handleTimeUpdate}
                 onDurationChange={handleDurationChange}
-                onUpdateLayer={handleUpdateLayer}
-                onSelectLayer={handleSelectLayer}
                 videoRef={videoRef}
+                layers={state.layers}
+                selectedLayerId={state.selectedLayerId}
+                onSelectLayer={handleSelectLayer}
+                onUpdateLayer={handleUpdateLayer}
+                onAddLayerAtCoords={handleAddLayerAtCoords}
               />
             </div>
           </>
@@ -468,68 +370,19 @@ export default function VideoEditor() {
           <VideoUpload onVideoUpload={handleVideoUpload} />
         )}
 
-        {/* Right: panels */}
-        {hasVideo && (
-          <div className="w-56 shrink-0 border-l border-[#3d2510] flex flex-col overflow-hidden bg-[#120a02]">
-            {/* Panel tabs */}
-            <div className="flex border-b border-[#3d2510]">
-              <button
-                onClick={() => setRightPanel('segments')}
-                className={`flex-1 text-xs font-bold py-2 px-3 transition-colors ${
-                  rightPanel === 'segments'
-                    ? 'border-b-2 border-[#c9b600] text-[#c9b600]'
-                    : 'text-[#5a4530] hover:text-[#c8b88a]'
-                }`}
-              >
-                Segments
-              </button>
-              <button
-                onClick={() => setRightPanel('layers')}
-                className={`flex-1 text-xs font-bold py-2 px-3 transition-colors ${
-                  rightPanel === 'layers'
-                    ? 'border-b-2 border-[#c9b600] text-[#c9b600]'
-                    : 'text-[#5a4530] hover:text-[#c8b88a]'
-                }`}
-              >
-                Layers
-              </button>
-            </div>
-
-            {/* Panel content */}
-            <div className="flex-1 overflow-hidden">
-              {rightPanel === 'segments' ? (
-                <SegmentsPanel
-                  segments={state.trimSegments}
-                  duration={state.duration}
-                  currentTime={state.currentTime}
-                  onAddSegment={handleAddTrimSegment}
-                  onUpdateSegment={handleUpdateTrimSegment}
-                  onDeleteSegment={handleDeleteTrimSegment}
-                  onSeek={handleSeek}
-                />
-              ) : (
-                <LayersPanel
-                  layers={state.layers}
-                  selectedLayerId={state.selectedLayerId}
-                  onSelectLayer={handleSelectLayer}
-                  onUpdateLayer={handleUpdateLayer}
-                  onDeleteLayer={handleDeleteLayer}
-                />
-              )}
-            </div>
-          </div>
-        )}
-
-        {/* Right: subtitles (optional, can be toggled) */}
-        {hasVideo && false && (
-          <SubtitlesPanel
-            subtitles={state.subtitles}
-            currentTime={state.currentTime}
-            duration={state.duration}
-            onSubtitlesChange={handleSubtitlesChange}
-            onSeek={handleSeek}
-          />
-        )}
+        {/* Right: subtitles / properties */}
+        <SubtitlesPanel
+          subtitles={state.subtitles}
+          currentTime={state.currentTime}
+          duration={state.duration}
+          onSubtitlesChange={handleSubtitlesChange}
+          onSeek={handleSeek}
+          layers={state.layers}
+          selectedLayerId={state.selectedLayerId}
+          onUpdateLayer={handleUpdateLayer}
+          onDeleteLayer={handleDeleteLayer}
+          onSelectLayer={handleSelectLayer}
+        />
       </div>
 
       {/* Timeline */}
@@ -559,6 +412,7 @@ export default function VideoEditor() {
           trimStart={state.trimStart}
           trimEnd={state.trimEnd || state.duration}
           onClose={() => setShowPreview(false)}
+          layers={state.layers}
         />
       )}
     </div>

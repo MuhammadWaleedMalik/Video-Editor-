@@ -20,94 +20,30 @@ export interface SmartTrimSegment {
   keep: boolean; // false = detected silence/filler
 }
 
-export interface ImageLayer {
+export interface Layer {
   id: string;
-  type: 'image';
-  src: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  opacity: number;
+  type: 'image' | 'video' | 'text';
+  x: number;          // percent (0-100)
+  y: number;          // percent (0-100)
+  width: number;      // percent (0-100)
+  height: number;     // percent (0-100)
   zIndex: number;
-  startTime: number;
-  endTime: number;
-  borderRadius: number;
-  borderWidth: number;
-  borderColor: string;
-  scale: number;
-  rotation: number;
-}
-
-export interface AudioLayer {
-  id: string;
-  type: 'audio';
-  src: string;
-  volume: number;
-  startTime: number;
-  endTime: number;
-  zIndex: number;
-}
-
-export interface TextLayer {
-  id: string;
-  type: 'text';
-  text: string;
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  fontSize: number;
-  color: string;
-  fontFamily: string;
-  opacity: number;
-  zIndex: number;
-  startTime: number;
-  endTime: number;
-  backgroundColor: string;
-  backgroundOpacity: number;
-  padding: number;
-  borderRadius: number;
-  textAlign: 'left' | 'center' | 'right';
-  fontWeight: 'normal' | 'bold' | '900';
-}
-
-export type Layer = ImageLayer | AudioLayer | TextLayer;
-
-export interface TrimSegment {
-  id: string;
-  startTime: number;
-  endTime: number;
-  trackType: 'video' | 'audio' | 'both';
-}
-
-export interface VideoTrack {
-  id: string;
-  file: File | null;
-  url: string | null;
-  duration: number;
-  hasAudio: boolean;
-}
-
-export interface AudioTrack {
-  id: string;
-  url: string | null;
-  duration: number;
-  volume: number;
-  muted: boolean;
+  name: string;
+  text?: string;
+  fontSize?: number;  // px
+  color?: string;     // color hex
+  bgColor?: string;   // bgColor hex
+  src?: string;       // URL (object URL or placeholder)
 }
 
 export interface EditorState {
   videoFile: File | null;
   videoUrl: string | null;
-  audioUrl: string | null;
-  audioBlob: Blob | null;
   duration: number;
   currentTime: number;
   isPlaying: boolean;
   trimStart: number;
   trimEnd: number;
-  trimSegments: TrimSegment[];
   splitPoints: SplitPoint[];
   subtitles: SubtitleChunk[];
   hasAudio: boolean;
@@ -120,3 +56,4 @@ export interface EditorState {
   layers: Layer[];
   selectedLayerId: string | null;
 }
+

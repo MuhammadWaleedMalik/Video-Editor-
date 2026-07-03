@@ -25,10 +25,14 @@ export default function AIToolsPanel({
   const [trimDone, setTrimDone] = useState(false);
 
   async function handleNoiseRemove() {
-    if (!hasVideo || loadingNoise || noiseRemoveApplied) return;
-    setLoadingNoise(true);
-    await onNoiseRemove();
-    setLoadingNoise(false);
+    if (!hasVideo || loadingNoise) return;
+    if (noiseRemoveApplied) {
+      await onNoiseRemove();
+    } else {
+      setLoadingNoise(true);
+      await onNoiseRemove();
+      setLoadingNoise(false);
+    }
   }
 
   async function handleSmartTrim() {

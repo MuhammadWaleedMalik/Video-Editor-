@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Play, Pause, SkipBack, Trash2 } from 'lucide-react';
-import { SubtitleChunk, VideoFormat, Layer, ImageLayer, TextLayer } from '@/types/editor';
+import { Play, Pause, SkipBack, Image as ImageIcon, Film as FilmIcon, Type as TypeIcon } from 'lucide-react';
+import { SubtitleChunk, VideoFormat, Layer } from '@/types/editor';
 
 interface VideoPreviewProps {
   videoUrl: string;
@@ -12,14 +12,17 @@ interface VideoPreviewProps {
   noiseRemoveApplied: boolean;
   subtitles: SubtitleChunk[];
   format: VideoFormat;
-  layers: Layer[];
-  selectedLayerId: string | null;
   onPlayPause: () => void;
   onTimeUpdate: (time: number) => void;
   onDurationChange: (duration: number) => void;
-  onUpdateLayer: (layerId: string, updates: Partial<Layer>) => void;
-  onSelectLayer: (layerId: string | null) => void;
   videoRef: React.RefObject<HTMLVideoElement>;
+
+  // Canvas layer props
+  layers: Layer[];
+  selectedLayerId: string | null;
+  onSelectLayer: (id: string | null) => void;
+  onUpdateLayer: (layer: Layer) => void;
+  onAddLayerAtCoords: (type: 'image' | 'video' | 'text', x: number, y: number) => void;
 }
 
 const FORMAT_RATIO: Record<VideoFormat, number> = {
@@ -172,31 +175,23 @@ export default function VideoPreview({
   noiseRemoveApplied,
   subtitles,
   format,
-  layers,
-  selectedLayerId,
   onPlayPause,
   onTimeUpdate,
   onDurationChange,
-  onUpdateLayer,
-  onSelectLayer,
   videoRef,
+  layers,
+  selectedLayerId,
+  onSelectLayer,
+  onUpdateLayer,
+  onAddLayerAtCoords,
 }: VideoPreviewProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const canvasContainerRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const animRef = useRef<number | null>(null);
   const subsRef = useRef(subtitles);
   subsRef.current = subtitles;
 
-  const [dragState, setDragState] = useState<{
-    layerId: string;
-    mode: 'move' | 'resize';
-    startX: number;
-    startY: number;
-    startX2?: number;
-    startY2?: number;
-    startW?: number;
-    startH?: number;
-  } | null>(null);
+  const [editingTextId, setEditingTextId] = useState<string | null>(null);
 
   const drawFrame = useCallback(() => {
     const video = videoRef.current;
@@ -239,90 +234,110 @@ export default function VideoPreview({
     if (!isPlaying) setTimeout(() => drawFrame(), 30);
   }, [subtitles, format, bgBlurEnabled, noiseRemoveApplied, isPlaying, drawFrame]);
 
-  // Get active layers for current time
-  const activeLayersForTime = layers.filter(
-    (layer) => currentTime >= layer.startTime && currentTime <= layer.endTime
-  );
-
-  // Mouse handlers for layer drag/resize
-  const handleLayerMouseDown = (e: React.MouseEvent, layerId: string, mode: 'move' | 'resize') => {
-    if (mode === 'resize') e.stopPropagation();
+  // Drag & drop layer creation
+  const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
-    onSelectLayer(layerId);
-
-    const container = canvasContainerRef.current;
-    if (!container) return;
-
-    const rect = container.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    const layer = layers.find((l) => l.id === layerId);
-    if (!layer) return;
-
-    setDragState({
-      layerId,
-      mode,
-      startX: x,
-      startY: y,
-      ...(mode === 'resize' && layer.type !== 'audio'
-        ? {
-            startX2: (layer as ImageLayer | TextLayer).width,
-            startY2: (layer as ImageLayer | TextLayer).height,
-          }
-        : {}),
-    });
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const type = e.dataTransfer.getData('layerType') as 'image' | 'video' | 'text';
+    if (type) {
+      const x = ((e.clientX - rect.left) / rect.width) * 100;
+      const y = ((e.clientY - rect.top) / rect.height) * 100;
+      onAddLayerAtCoords(type, Math.max(0, Math.min(90, x)), Math.max(0, Math.min(90, y)));
+    }
   };
 
-  useEffect(() => {
-    const handleMouseMove = (e: MouseEvent) => {
-      if (!dragState) return;
+  // Drag & resize handlers
+  const handleMouseDown = (
+    e: React.MouseEvent,
+    layer: Layer,
+    action: 'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br'
+  ) => {
+    e.stopPropagation();
+    onSelectLayer(layer.id);
 
-      const container = canvasContainerRef.current;
-      if (!container) return;
+    if (!containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const containerW = rect.width;
+    const containerH = rect.height;
 
-      const rect = container.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
+    const startX = layer.x;
+    const startY = layer.y;
+    const startW = layer.width;
+    const startH = layer.height;
+    const startMouseX = e.clientX;
+    const startMouseY = e.clientY;
 
-      const dx = x - dragState.startX;
-      const dy = y - dragState.startY;
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = ((moveEvent.clientX - startMouseX) / containerW) * 100;
+      const deltaY = ((moveEvent.clientY - startMouseY) / containerH) * 100;
 
-      const layer = layers.find((l) => l.id === dragState.layerId);
-      if (!layer) return;
+      if (action === 'move') {
+        const nextX = Math.max(0, Math.min(100 - startW, startX + deltaX));
+        const nextY = Math.max(0, Math.min(100 - startH, startY + deltaY));
+        onUpdateLayer({ ...layer, x: nextX, y: nextY });
+      } else {
+        let nextX = layer.x;
+        let nextY = layer.y;
+        let nextW = layer.width;
+        let nextH = layer.height;
 
-      if (dragState.mode === 'move' && layer.type !== 'audio') {
-        const imageLayer = layer as ImageLayer | TextLayer;
-        onUpdateLayer(dragState.layerId, {
-          x: imageLayer.x + dx,
-          y: imageLayer.y + dy,
-        });
-      } else if (dragState.mode === 'resize' && layer.type !== 'audio') {
-        const imageLayer = layer as ImageLayer | TextLayer;
-        onUpdateLayer(dragState.layerId, {
-          width: Math.max(50, (dragState.startX2 || 0) + dx),
-          height: Math.max(50, (dragState.startY2 || 0) + dy),
+        if (action === 'resize-br') {
+          nextW = Math.max(5, Math.min(100 - startX, startW + deltaX));
+          nextH = Math.max(5, Math.min(100 - startY, startH + deltaY));
+        } else if (action === 'resize-bl') {
+          const possibleW = startW - deltaX;
+          if (possibleW > 5 && startX + deltaX >= 0) {
+            nextX = startX + deltaX;
+            nextW = possibleW;
+          }
+          nextH = Math.max(5, Math.min(100 - startY, startH + deltaY));
+        } else if (action === 'resize-tr') {
+          nextW = Math.max(5, Math.min(100 - startX, startW + deltaX));
+          const possibleH = startH - deltaY;
+          if (possibleH > 5 && startY + deltaY >= 0) {
+            nextY = startY + deltaY;
+            nextH = possibleH;
+          }
+        } else if (action === 'resize-tl') {
+          const possibleW = startW - deltaX;
+          if (possibleW > 5 && startX + deltaX >= 0) {
+            nextX = startX + deltaX;
+            nextW = possibleW;
+          }
+          const possibleH = startH - deltaY;
+          if (possibleH > 5 && startY + deltaY >= 0) {
+            nextY = startY + deltaY;
+            nextH = possibleH;
+          }
+        }
+
+        onUpdateLayer({
+          ...layer,
+          x: nextX,
+          y: nextY,
+          width: nextW,
+          height: nextH,
         });
       }
-
-      setDragState((prev) =>
-        prev ? { ...prev, startX: x, startY: y } : null
-      );
     };
 
     const handleMouseUp = () => {
-      setDragState(null);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
     };
 
-    if (dragState) {
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-      return () => {
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const handleContainerClick = (e: React.MouseEvent) => {
+    // If click directly on container/canvas, deselect layer
+    if (e.target === e.currentTarget || e.target === canvasRef.current) {
+      onSelectLayer(null);
+      setEditingTextId(null);
     }
-  }, [dragState, layers, onUpdateLayer]);
+  };
 
   return (
     <div className="flex flex-col h-full gap-2 min-h-0">
@@ -344,78 +359,150 @@ export default function VideoPreview({
       {/* Canvas — aspect ratio constrained */}
       <div className="flex-1 flex items-center justify-center overflow-hidden min-h-0">
         <div
-          ref={canvasContainerRef}
-          className="relative bg-black rounded-xl overflow-hidden max-h-full max-w-full"
+          ref={containerRef}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={handleDrop}
+          onClick={handleContainerClick}
+          className="relative bg-black rounded-xl overflow-hidden max-h-full max-w-full group"
           style={{ aspectRatio: FORMAT_RATIO[format], height: '100%' }}
-          onClick={() => !selectedLayerId && onSelectLayer(null)}
         >
-          <canvas ref={canvasRef} className="w-full h-full block object-contain" />
+          <canvas ref={canvasRef} className="w-full h-full block object-contain pointer-events-none" />
 
-          {/* Render layers */}
-          {activeLayersForTime.map((layer) => (
-            <div
-              key={layer.id}
-              onMouseDown={(e) => handleLayerMouseDown(e, layer.id, 'move')}
-              className={`absolute cursor-move transition-opacity ${
-                selectedLayerId === layer.id ? 'opacity-100 ring-2 ring-[#c9b600]' : 'opacity-75 hover:opacity-100'
-              }`}
-              style={{
-                left: layer.type !== 'audio' ? `${(layer as ImageLayer | TextLayer).x}px` : 0,
-                top: layer.type !== 'audio' ? `${(layer as ImageLayer | TextLayer).y}px` : 0,
-                width: layer.type !== 'audio' ? `${(layer as ImageLayer | TextLayer).width}px` : 'auto',
-                height: layer.type !== 'audio' ? `${(layer as ImageLayer | TextLayer).height}px` : 'auto',
-                opacity: layer.type !== 'audio' ? (layer as ImageLayer | TextLayer).opacity : 1,
-                zIndex: layer.zIndex,
-              }}
-            >
-              {layer.type === 'image' && (
-                <img
-                  src={(layer as ImageLayer).src}
-                  alt="overlay"
-                  className="w-full h-full object-cover pointer-events-none"
-                  style={{
-                    borderRadius: `${(layer as ImageLayer).borderRadius}px`,
-                    border: (layer as ImageLayer).borderWidth > 0 ? `${(layer as ImageLayer).borderWidth}px solid ${(layer as ImageLayer).borderColor}` : 'none',
-                    transform: `scale(${(layer as ImageLayer).scale}) rotate(${(layer as ImageLayer).rotation}deg)`,
-                  }}
-                />
-              )}
-              {layer.type === 'text' && (
-                <div
-                  className="w-full h-full flex items-center justify-center pointer-events-none overflow-hidden"
-                  style={{
-                    fontSize: `${(layer as TextLayer).fontSize}px`,
-                    color: (layer as TextLayer).color,
-                    fontFamily: (layer as TextLayer).fontFamily,
-                    fontWeight: (layer as TextLayer).fontWeight === 'normal' ? 'normal' : (layer as TextLayer).fontWeight === 'bold' ? 'bold' : '900',
-                    textAlign: (layer as TextLayer).textAlign,
-                    padding: `${(layer as TextLayer).padding}px`,
-                    borderRadius: `${(layer as TextLayer).borderRadius}px`,
-                    whiteSpace: 'pre-wrap',
-                    wordWrap: 'break-word',
-                    backgroundColor: `rgba(${parseInt((layer as TextLayer).backgroundColor.slice(1, 3), 16)}, ${parseInt((layer as TextLayer).backgroundColor.slice(3, 5), 16)}, ${parseInt((layer as TextLayer).backgroundColor.slice(5, 7), 16)}, ${(layer as TextLayer).backgroundOpacity})`,
-                  }}
-                >
-                  {(layer as TextLayer).text}
+          {/* Interactive Canvas Layers */}
+          {layers.map((layer) => {
+            const isSelected = selectedLayerId === layer.id;
+            const isEditing = editingTextId === layer.id;
+
+            return (
+              <div
+                key={layer.id}
+                onMouseDown={(e) => handleMouseDown(e, layer, 'move')}
+                className={`absolute select-none group/layer ${
+                  isSelected
+                    ? 'border-2 border-[#c9b600] ring-1 ring-black/40'
+                    : 'border border-dashed border-[#c9b600]/30 hover:border-[#c9b600]/75'
+                }`}
+                style={{
+                  left: `${layer.x}%`,
+                  top: `${layer.y}%`,
+                  width: `${layer.width}%`,
+                  height: `${layer.height}%`,
+                  zIndex: layer.zIndex,
+                  cursor: isSelected ? 'move' : 'pointer',
+                }}
+              >
+                {/* Content Renderer */}
+                <div className="w-full h-full relative overflow-hidden flex items-center justify-center">
+                  {layer.type === 'text' && (
+                    <div
+                      className="w-full h-full flex items-center justify-center text-center px-1"
+                      style={{ backgroundColor: layer.bgColor || '#00000000' }}
+                    >
+                      {isEditing ? (
+                        <textarea
+                          autoFocus
+                          value={layer.text || ''}
+                          onChange={(e) => onUpdateLayer({ ...layer, text: e.target.value })}
+                          onBlur={() => setEditingTextId(null)}
+                          className="w-full h-full bg-transparent border-none outline-none resize-none font-bold text-center leading-normal"
+                          style={{
+                            fontSize: `${layer.fontSize || 20}px`,
+                            color: layer.color || '#ffffff',
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <p
+                          onDoubleClick={(e) => {
+                            e.stopPropagation();
+                            setEditingTextId(layer.id);
+                          }}
+                          className="font-bold select-none cursor-text w-full break-words leading-normal"
+                          style={{
+                            fontSize: `${layer.fontSize || 20}px`,
+                            color: layer.color || '#ffffff',
+                          }}
+                        >
+                          {layer.text || 'Double click to edit'}
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {layer.type === 'image' && (
+                    layer.src ? (
+                      <img
+                        src={layer.src}
+                        alt={layer.name}
+                        className="w-full h-full object-contain pointer-events-none"
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-[#241508] to-[#120a02] flex flex-col items-center justify-center text-[#c9b600] border border-[#3d2510] gap-1 p-2">
+                        <ImageIcon size={22} className="opacity-80" />
+                        <span className="text-[10px] font-semibold opacity-85 text-center truncate w-full">{layer.name}</span>
+                        <span className="text-[8px] text-[#7a6040] text-center hidden group-hover/layer:block">Upload in sidebar</span>
+                      </div>
+                    )
+                  )}
+
+                  {layer.type === 'video' && (
+                    layer.src ? (
+                      <video
+                        src={layer.src}
+                        className="w-full h-full object-contain pointer-events-none"
+                        muted
+                        loop
+                        autoPlay
+                        playsInline
+                      />
+                    ) : (
+                      <div className="w-full h-full bg-gradient-to-br from-[#241508] to-[#120a02] flex flex-col items-center justify-center text-[#c9b600] border border-[#3d2510] gap-1 p-2">
+                        <FilmIcon size={22} className="opacity-80 animate-pulse" />
+                        <span className="text-[10px] font-semibold opacity-85 text-center truncate w-full">{layer.name}</span>
+                        <span className="text-[8px] text-[#7a6040] text-center hidden group-hover/layer:block">Upload in sidebar</span>
+                      </div>
+                    )
+                  )}
                 </div>
-              )}
 
-              {/* Resize handle for selected layer */}
-              {selectedLayerId === layer.id && layer.type !== 'audio' && (
-                <div
-                  onMouseDown={(e) => handleLayerMouseDown(e, layer.id, 'resize')}
-                  className="absolute bottom-0 right-0 w-3 h-3 bg-[#c9b600] cursor-nwse-resize"
-                  style={{ transform: 'translate(50%, 50%)' }}
-                />
-              )}
-            </div>
-          ))}
+                {/* Resize Handles (Only show when selected) */}
+                {isSelected && (
+                  <>
+                    {/* Top Left */}
+                    <div
+                      onMouseDown={(e) => handleMouseDown(e, layer, 'resize-tl')}
+                      className="absolute -top-1.5 -left-1.5 w-3.5 h-3.5 bg-white border border-[#1a0c05] rounded-full cursor-nwse-resize z-10 hover:bg-[#c9b600]"
+                    />
+                    {/* Top Right */}
+                    <div
+                      onMouseDown={(e) => handleMouseDown(e, layer, 'resize-tr')}
+                      className="absolute -top-1.5 -right-1.5 w-3.5 h-3.5 bg-white border border-[#1a0c05] rounded-full cursor-nesw-resize z-10 hover:bg-[#c9b600]"
+                    />
+                    {/* Bottom Left */}
+                    <div
+                      onMouseDown={(e) => handleMouseDown(e, layer, 'resize-bl')}
+                      className="absolute -bottom-1.5 -left-1.5 w-3.5 h-3.5 bg-white border border-[#1a0c05] rounded-full cursor-nesw-resize z-10 hover:bg-[#c9b600]"
+                    />
+                    {/* Bottom Right */}
+                    <div
+                      onMouseDown={(e) => handleMouseDown(e, layer, 'resize-br')}
+                      className="absolute -bottom-1.5 -right-1.5 w-3.5 h-3.5 bg-white border border-[#1a0c05] rounded-full cursor-nwse-resize z-10 hover:bg-[#c9b600]"
+                    />
+                  </>
+                )}
+              </div>
+            );
+          })}
 
+          {/* Quick Play/Pause overlay click */}
           <button
             onClick={onPlayPause}
-            className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/15 pointer-events-none hover:pointer-events-auto"
+            className="absolute inset-0 flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity bg-black/15 pointer-events-none group-hover:pointer-events-auto"
+            style={{ zIndex: 0 }}
           >
-            <div className="w-14 h-14 rounded-full bg-black/55 flex items-center justify-center">
+            {/* Direct click on button will play/pause, doesn't interfere with layers because layers have higher z-index */}
+            <div className="w-14 h-14 rounded-full bg-black/55 flex items-center justify-center pointer-events-auto">
               {isPlaying
                 ? <Pause size={24} className="text-white" />
                 : <Play size={24} className="text-white ml-1" />}
