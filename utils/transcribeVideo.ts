@@ -37,7 +37,7 @@ export async function extractAudioTrack(file: File): Promise<Float32Array> {
  */
 export async function transcribeAudio(
   audioData: Float32Array,
-  modelName: string = 'Xenova/whisper-tiny',    // Xenova/whisper-tiny is lighter for default web runtime
+  modelName: string = 'Xenova/whisper-small',
   onProgress?: (status: string) => void,
   language: string = 'auto'                     // 'urdu', 'hi', 'auto', etc.
 ): Promise<SubtitleChunk[]> {
@@ -65,7 +65,7 @@ export async function transcribeAudio(
 
   if (onProgress) onProgress('Transcribing audio...');
 
-  // Force transcription in original language
+  // Optional explicit language (e.g. 'en', 'ur') or auto-detect with 'auto'
   const output = await transcriber(audioData, {
     chunk_length_s: 30,
     stride_length_s: 5,

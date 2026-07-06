@@ -22,9 +22,12 @@ export interface Layer {
   endTime: number;
   text?: string;
   fontSize?: number;  // px
+  fontFamily?: string; // CSS font stack
   color?: string;     // color hex
   bgColor?: string;   // bgColor hex
+  themeId?: string;   // optional reusable text theme id
   src?: string;       // URL (object URL or placeholder)
+  mediaMuted?: boolean; // Video layer mute state
 }
 
 export interface EditorState {
@@ -39,6 +42,9 @@ export interface EditorState {
   hasAudio: boolean;
   audioMuted: boolean;
   format: VideoFormat;
+  playbackRate: number;
+  subtitleFontScale: number;
+  subtitleFontFamily: string;
   layers: Layer[];
   selectedLayerId: string | null;
 }

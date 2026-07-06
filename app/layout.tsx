@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
   title: 'CVVID — Video Editor',
-  description: 'Professional video editor with subtitles, trim, split and audio controls',
+  description: 'Professional video editor with subtitles, trim, layers, and audio controls',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -1,7 +1,5 @@
 'use client';
 
-import { useState, useRef, useCallback } from 'react';
-import { EditorState, SubtitleChunk, VideoFormat, Layer, LayerType } from '@/types/editor';
 import EditorHeader from './EditorHeader';
 import LeftSidebar from './LeftSidebar';
 import VideoPreview from './VideoPreview';
@@ -9,394 +7,123 @@ import SubtitlesPanel from './SubtitlesPanel';
 import Timeline from './Timeline';
 import VideoUpload from './VideoUpload';
 import PreviewModal from './PreviewModal';
-import { extractAudioTrack, transcribeAudio } from '@/utils/transcribeVideo';
-import { Toaster, toast } from 'sonner';
-
-const initialState: EditorState = {
-  videoFile: null,
-  videoUrl: null,
-  duration: 0,
-  currentTime: 0,
-  isPlaying: false,
-  trimStart: 0,
-  trimEnd: 0,
-  subtitles: [],
-  hasAudio: false,
-  audioMuted: false,
-  format: '16:9',
-  layers: [],
-  selectedLayerId: null,
-};
-
-
-async function extractWaveform(url: string): Promise<Float32Array | null> {
-  try {
-    const res = await fetch(url);
-    const buf = await res.arrayBuffer();
-    const ctx = new AudioContext();
-    const audio = await ctx.decodeAudioData(buf);
-    const ch = audio.getChannelData(0);
-    const samples = 800;
-    const block = Math.floor(ch.length / samples);
-    const waveform = new Float32Array(samples);
-    for (let i = 0; i < samples; i++) {
-      const s = i * block;
-      let max = 0;
-      for (let j = 0; j < block; j++) {
-        const abs = Math.abs(ch[s + j] ?? 0);
-        if (abs > max) max = abs;
-      }
-      waveform[i] = max;
-    }
-    await ctx.close();
-    return waveform;
-  } catch {
-    return null;
-  }
-}
+import useVideoEditorController from './editorController';
 
 export default function VideoEditor() {
-  const [state, setState] = useState<EditorState>(initialState);
-  const [title, setTitle] = useState('My Video — Draft');
-  const [waveformData, setWaveformData] = useState<Float32Array | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [isTranscribing, setIsTranscribing] = useState(false);
-  const [transcriptionStatus, setTranscriptionStatus] = useState('');
-  const [whisperModel, setWhisperModel] = useState<'Xenova/whisper-tiny' | 'Xenova/whisper-small'>('Xenova/whisper-tiny');
-
-  const set = useCallback((patch: Partial<EditorState>) => {
-    setState((prev) => ({ ...prev, ...patch }));
-  }, []);
-
-  /* ── Video upload ── */
-  function handleVideoUpload(file: File) {
-    if (state.videoUrl) URL.revokeObjectURL(state.videoUrl);
-    const url = URL.createObjectURL(file);
-    setWaveformData(null);
-    set({
-      videoFile: file,
-      videoUrl: url,
-      isPlaying: false,
-      currentTime: 0,
-      duration: 0,
-      trimStart: 0,
-      trimEnd: 0,
-      hasAudio: true,
-      audioMuted: false,
-    });
-    extractWaveform(url).then((data) => { if (data) setWaveformData(data); });
-  }
-
-  /* ── Playback ── */
-  function handlePlayPause() {
-    const v = videoRef.current;
-    if (!v) return;
-    if (state.isPlaying) {
-      v.pause();
-      set({ isPlaying: false });
-    } else {
-      if (state.trimStart > 0 && v.currentTime < state.trimStart) v.currentTime = state.trimStart;
-      v.play();
-      set({ isPlaying: true });
-    }
-  }
-
-  function handleTimeUpdate(time: number) {
-    if (state.trimEnd > 0 && time >= state.trimEnd) {
-      videoRef.current?.pause();
-      set({ isPlaying: false, currentTime: state.trimEnd });
-      return;
-    }
-    set({ currentTime: time });
-  }
-
-  function handleDurationChange(duration: number) {
-    set({ duration, trimEnd: duration });
-  }
-
-  function handleSeek(time: number) {
-    if (videoRef.current) videoRef.current.currentTime = time;
-    set({ currentTime: time });
-  }
-
-  /* ── Format ── */
-  function handleFormatChange(format: VideoFormat) {
-    set({ format });
-  }
-
-  /* ── Trim / Split ── */
-  function handleTrimChange(start: number, end: number) {
-    set({ trimStart: start, trimEnd: end });
-  }
-
-  /* ── Canvas Layers ── */
-  function createDefaultLayer(type: LayerType, count: number, x = 30, y = 30): Layer {
-    const id = crypto.randomUUID();
-    const startTime = Math.max(0, state.currentTime);
-    const fallbackEnd = startTime + 5;
-    const endTime = state.duration > 0 ? Math.min(state.duration, Math.max(startTime + 0.5, fallbackEnd)) : fallbackEnd;
-    const label = type === 'audio' ? 'Audio' : `${type[0].toUpperCase()}${type.slice(1)}`;
-
-    switch (type) {
-      case 'audio':
-        return {
-          id,
-          type,
-          x,
-          y,
-          width: 18,
-          height: 18,
-          zIndex: count + 1,
-          name: `${label} ${count + 1}`,
-          startTime,
-          endTime,
-          src: '',
-        };
-      case 'text':
-        return {
-          id,
-          type,
-          x,
-          y,
-          width: 40,
-          height: 12,
-          zIndex: count + 1,
-          name: `${label} ${count + 1}`,
-          startTime,
-          endTime,
-          text: 'Double click to edit text',
-          fontSize: 20,
-          color: '#ffffff',
-          bgColor: '#00000000',
-        };
-      case 'image':
-        return {
-          id,
-          type,
-          x,
-          y,
-          width: 35,
-          height: 35,
-          zIndex: count + 1,
-          name: `${label} ${count + 1}`,
-          startTime,
-          endTime,
-          src: '', // empty for placeholder
-        };
-      case 'video':
-        return {
-          id,
-          type,
-          x,
-          y,
-          width: 40,
-          height: 40,
-          zIndex: count + 1,
-          name: `${label} ${count + 1}`,
-          startTime,
-          endTime,
-          src: '', // empty for placeholder
-        };
-    }
-  }
-
-  function handleAddLayer(type: LayerType) {
-    const newLayer = createDefaultLayer(type, state.layers.length);
-    set({
-      layers: [...state.layers, newLayer],
-      selectedLayerId: newLayer.id,
-    });
-  }
-
-  function handleAddLayerAtCoords(type: Exclude<LayerType, 'audio'>, x: number, y: number) {
-    const newLayer = createDefaultLayer(type, state.layers.length, x, y);
-    set({
-      layers: [...state.layers, newLayer],
-      selectedLayerId: newLayer.id,
-    });
-  }
-
-  function handleUpdateLayer(updated: Layer) {
-    set({
-      layers: state.layers.map((l) => (l.id === updated.id ? updated : l)),
-    });
-  }
-
-  function handleDeleteLayer(id: string) {
-    set({
-      layers: state.layers.filter((l) => l.id !== id),
-      selectedLayerId: state.selectedLayerId === id ? null : state.selectedLayerId,
-    });
-  }
-
-  function handleSelectLayer(id: string | null) {
-    set({ selectedLayerId: id });
-  }
-
-  function handleLayerTimingChange(id: string, startTime: number, endTime: number) {
-    set({
-      layers: state.layers.map((layer) =>
-        layer.id === id ? { ...layer, startTime, endTime } : layer
-      ),
-    });
-  }
-
-  function handleLayerZIndexChange(id: string, zIndex: number) {
-    set({
-      layers: state.layers.map((layer) => {
-        if (layer.id !== id) return layer;
-        return { ...layer, zIndex: Math.max(1, Math.floor(zIndex)) };
-      }),
-    });
-  }
-
-  /* ── Subtitles ── */
-  function handleSubtitlesChange(chunks: SubtitleChunk[]) {
-    set({ subtitles: chunks });
-  }
-
-  async function handleAutoTranscribe() {
-    if (!state.videoFile) {
-      toast.error('No video file loaded.');
-      return;
-    }
-    setIsTranscribing(true);
-    setTranscriptionStatus('Initializing Web Audio...');
-    try {
-      setTranscriptionStatus('Extracting audio track from media...');
-      const audioData = await extractAudioTrack(state.videoFile);
-      const transcribedSubs = await transcribeAudio(
-        audioData,
-        whisperModel,
-        (status) => setTranscriptionStatus(status)
-      );
-      handleSubtitlesChange(transcribedSubs);
-      toast.success(`Whisper transcription completed! Created ${transcribedSubs.length} subtitle cues.`);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Speech recognition failed.';
-      toast.error(message);
-    } finally {
-      setIsTranscribing(false);
-      setTranscriptionStatus('');
-    }
-  }
-
-  /* ── Audio ── */
-  function handleAudioMuteToggle() {
-    if (videoRef.current) videoRef.current.muted = !state.audioMuted;
-    set({ audioMuted: !state.audioMuted });
-  }
-
-  function handleAudioRemove() {
-    if (videoRef.current) videoRef.current.muted = true;
-    set({ hasAudio: false, audioMuted: true });
-    setWaveformData(null);
-  }
-
-  const hasVideo = !!state.videoUrl;
+  const editor = useVideoEditorController();
+  const hasVideo = Boolean(editor.state.videoUrl);
 
   return (
-    <div className="flex flex-col h-screen bg-[#1a0c05] overflow-hidden">
+    <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#1a0c05]">
       <EditorHeader
-        title={title}
-        format={state.format}
-        onTitleChange={setTitle}
-        onFormatChange={handleFormatChange}
-        onPreviewOpen={() => setShowPreview(true)}
+        title={editor.title}
+        format={editor.state.format}
+        onTitleChange={editor.setTitle}
+        onFormatChange={editor.handleFormatChange}
+        onPreviewOpen={() => editor.setShowPreview(true)}
       />
 
-      <div className="flex flex-1 overflow-hidden min-h-0">
-        <LeftSidebar
-          layers={state.layers}
-          selectedLayerId={state.selectedLayerId}
-          onSelectLayer={handleSelectLayer}
-          onAddLayer={handleAddLayer}
-          onDeleteLayer={handleDeleteLayer}
-        />
+      <div className="min-h-0 flex-1 overflow-y-auto md:overflow-hidden">
+        <div className="flex min-h-full flex-col md:h-full md:min-h-0 md:flex-row">
+          <div className="w-full shrink-0 max-h-[34vh] md:h-full md:max-h-none md:w-60">
+            <LeftSidebar
+              layers={editor.state.layers}
+              selectedLayerId={editor.state.selectedLayerId}
+              onSelectLayer={editor.handleSelectLayer}
+              onAddLayer={editor.handleAddLayer}
+              onDeleteLayer={editor.handleDeleteLayer}
+            />
+          </div>
 
-        {hasVideo ? (
-          <>
-            <div className="flex-1 p-2 flex flex-col overflow-hidden min-w-0">
+          <div className="flex min-h-[360px] min-w-0 flex-1 md:h-full md:min-h-0">
+            {hasVideo ? (
               <VideoPreview
-                videoUrl={state.videoUrl!}
-                isPlaying={state.isPlaying}
-                currentTime={state.currentTime}
-                subtitles={state.subtitles}
-                format={state.format}
-                onPlayPause={handlePlayPause}
-                onTimeUpdate={handleTimeUpdate}
-                onDurationChange={handleDurationChange}
-                videoRef={videoRef}
-                layers={state.layers}
-                selectedLayerId={state.selectedLayerId}
-                onSelectLayer={handleSelectLayer}
-                onUpdateLayer={handleUpdateLayer}
-                onAddLayerAtCoords={handleAddLayerAtCoords}
+                videoUrl={editor.state.videoUrl!}
+                isPlaying={editor.state.isPlaying}
+                currentTime={editor.state.currentTime}
+                subtitles={editor.state.subtitles}
+                format={editor.state.format}
+                onPlayPause={editor.handlePlayPause}
+                onTimeUpdate={editor.handleTimeUpdate}
+                onDurationChange={editor.handleDurationChange}
+                subtitleFontScale={editor.state.subtitleFontScale}
+                subtitleFontFamily={editor.state.subtitleFontFamily}
+                videoRef={editor.videoRef}
+                audioMuted={editor.state.audioMuted}
+                playbackRate={editor.state.playbackRate}
+                onToggleMute={editor.handleAudioMuteToggle}
+                onPlaybackRateChange={editor.handlePlaybackRateChange}
+                layers={editor.state.layers}
+                selectedLayerId={editor.state.selectedLayerId}
+                onSelectLayer={editor.handleSelectLayer}
+                onUpdateLayer={editor.handleUpdateLayer}
+                onAddLayerAtCoords={editor.handleAddLayerAtCoords}
               />
-            </div>
-          </>
-        ) : (
-          <VideoUpload onVideoUpload={handleVideoUpload} />
-        )}
+            ) : (
+              <VideoUpload onVideoUpload={editor.handleVideoUpload} />
+            )}
+          </div>
 
-        {/* Right: subtitles / properties */}
-        <SubtitlesPanel
-          subtitles={state.subtitles}
-          currentTime={state.currentTime}
-          duration={state.duration}
-          onSubtitlesChange={handleSubtitlesChange}
-          onSeek={handleSeek}
-          layers={state.layers}
-          selectedLayerId={state.selectedLayerId}
-          onUpdateLayer={handleUpdateLayer}
-          onDeleteLayer={handleDeleteLayer}
-          onSelectLayer={handleSelectLayer}
-          hasVideo={hasVideo}
-          onAutoGenerate={handleAutoTranscribe}
-          isTranscribing={isTranscribing}
-          transcriptionStatus={transcriptionStatus}
-          whisperModel={whisperModel}
-          setWhisperModel={setWhisperModel}
-        />
+          <div className="w-full shrink-0 max-h-[46vh] md:h-full md:max-h-none md:w-72">
+            <SubtitlesPanel
+              subtitles={editor.state.subtitles}
+              currentTime={editor.state.currentTime}
+              duration={editor.state.duration}
+              onSubtitlesChange={editor.handleSubtitlesChange}
+              onSeek={editor.handleSeek}
+              isTranscribing={editor.isTranscribing}
+              transcribeStatus={editor.transcribeStatus}
+              onAutoTranscribe={editor.handleAutoTranscribe}
+              transcribeLanguage={editor.transcribeLanguage}
+              onTranscribeLanguageChange={editor.handleTranscribeLanguageChange}
+              subtitleFontScale={editor.state.subtitleFontScale}
+              subtitleFontFamily={editor.state.subtitleFontFamily}
+              onSubtitleFontScaleChange={editor.handleSubtitleFontScaleChange}
+              onSubtitleFontFamilyChange={editor.handleSubtitleFontFamilyChange}
+              layers={editor.state.layers}
+              selectedLayerId={editor.state.selectedLayerId}
+              onUpdateLayer={editor.handleUpdateLayer}
+              onDeleteLayer={editor.handleDeleteLayer}
+              onSelectLayer={editor.handleSelectLayer}
+            />
+          </div>
+        </div>
       </div>
 
-      {/* Timeline */}
       <Timeline
-        duration={state.duration}
-        currentTime={state.currentTime}
-        trimStart={state.trimStart}
-        trimEnd={state.trimEnd || state.duration}
-        subtitles={state.subtitles}
-        layers={state.layers}
-        selectedLayerId={state.selectedLayerId}
-        hasAudio={state.hasAudio}
-        audioMuted={state.audioMuted}
-        waveformData={waveformData}
-        onSeek={handleSeek}
-        onTrimChange={handleTrimChange}
-        onAudioMuteToggle={handleAudioMuteToggle}
-        onAudioRemove={handleAudioRemove}
-        onSelectLayer={handleSelectLayer}
-        onLayerTimingChange={handleLayerTimingChange}
-        onLayerZIndexChange={handleLayerZIndexChange}
+        duration={editor.state.duration}
+        currentTime={editor.state.currentTime}
+        trimStart={editor.state.trimStart}
+        trimEnd={editor.state.trimEnd || editor.state.duration}
+        subtitles={editor.state.subtitles}
+        layers={editor.state.layers}
+        selectedLayerId={editor.state.selectedLayerId}
+        hasAudio={editor.state.hasAudio}
+        audioMuted={editor.state.audioMuted}
+        waveformData={editor.waveformData}
+        onSeek={editor.handleSeek}
+        onTrimChange={editor.handleTrimChange}
+        onAudioMuteToggle={editor.handleAudioMuteToggle}
+        onAudioRemove={editor.handleAudioRemove}
+        onSelectLayer={editor.handleSelectLayer}
+        onLayerTimingChange={editor.handleLayerTimingChange}
+        onLayerOrderChange={editor.handleLayerOrderChange}
       />
 
-      {/* Preview modal */}
-      {showPreview && hasVideo && (
+      {editor.showPreview && hasVideo && (
         <PreviewModal
-          videoUrl={state.videoUrl!}
-          format={state.format}
-          subtitles={state.subtitles}
-          trimStart={state.trimStart}
-          trimEnd={state.trimEnd || state.duration}
-          onClose={() => setShowPreview(false)}
-          layers={state.layers}
+          videoUrl={editor.state.videoUrl!}
+          format={editor.state.format}
+          subtitles={editor.state.subtitles}
+          audioMuted={editor.state.audioMuted}
+          trimStart={editor.state.trimStart}
+          trimEnd={editor.state.trimEnd || editor.state.duration}
+          onClose={() => editor.setShowPreview(false)}
+          subtitleFontScale={editor.state.subtitleFontScale}
+          subtitleFontFamily={editor.state.subtitleFontFamily}
+          layers={editor.state.layers}
         />
       )}
-
-      {/* Toast notifications */}
-      <Toaster position="bottom-right" theme="dark" richColors />
     </div>
   );
 }

@@ -1,16 +1,19 @@
 'use client';
 
-/* eslint-disable @next/next/no-img-element */
-
-import { useEffect, useRef, useState } from 'react';
-import { X, Play, Pause, Volume2, VolumeX, Maximize2 } from 'lucide-react';
-import { VideoFormat, SubtitleChunk, Layer } from '@/types/editor';
-
-const FORMAT_RATIO: Record<VideoFormat, number> = {
-  '16:9': 16 / 9,
-  '9:16': 9 / 16,
-  '1:1': 1,
-};
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Maximize2, X } from 'lucide-react';
+import { VideoFormat, Layer, SubtitleChunk } from '@/types/editor';
+import { FORMAT_RATIO } from './videoCanvas';
+import { buildSRT, buildVTT, downloadTextFile } from './previewExport';
+import {
+  getSegmentAtOrAfter,
+  getTimelineDuration,
+  getTrimSegments,
+  mapLinearToSegmentTime,
+  mapSegmentTimeToLinear,
+} from './segments';
+import PreviewCanvas from './PreviewCanvas';
+import PreviewFooter from './PreviewFooter';
 
 interface PreviewModalProps {
   videoUrl: string;
@@ -18,13 +21,11 @@ interface PreviewModalProps {
   subtitles: SubtitleChunk[];
   trimStart: number;
   trimEnd: number;
+  audioMuted: boolean;
   onClose: () => void;
   layers?: Layer[];
-}
-
-function formatTime(s: number): string {
-  const m = Math.floor(s / 60);
-  return `${String(m).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  subtitleFontScale: number;
+  subtitleFontFamily: string;
 }
 
 export default function PreviewModal({
@@ -33,95 +34,122 @@ export default function PreviewModal({
   subtitles,
   trimStart,
   trimEnd,
+  audioMuted,
   onClose,
   layers = [],
+  subtitleFontScale,
+  subtitleFontFamily,
 }: PreviewModalProps) {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const progressRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
-  const [currentTime, setCurrentTime] = useState(() => {
-    return (trimStart && isFinite(trimStart)) ? trimStart : 0;
-  });
-  const [muted, setMuted] = useState(false);
-  const [activeSub, setActiveSub] = useState<SubtitleChunk | null>(null);
+  const [muted, setMuted] = useState(audioMuted);
+  const [currentTime, setCurrentTime] = useState(() => trimStart || 0);
+  const [videoRef, setVideoRef] = useState<HTMLVideoElement | null>(null);
+  const safeStart = trimStart > 0 && Number.isFinite(trimStart) ? trimStart : 0;
+  const safeEnd = trimEnd > 0 && Number.isFinite(trimEnd) ? trimEnd : 1;
+  const segments = useMemo(() => getTrimSegments(safeEnd, safeStart, safeEnd), [safeEnd, safeStart]);
+  const totalDuration = getTimelineDuration(segments);
+  const activeSub = useMemo(
+    () => subtitles.find((chunk) => currentTime >= chunk.startTime && currentTime <= chunk.endTime) ?? null,
+    [currentTime, subtitles]
+  );
 
-  const validTrimStart = (trimStart && isFinite(trimStart)) ? trimStart : 0;
-  const validTrimEnd = (trimEnd && isFinite(trimEnd)) ? trimEnd : 1;
-  const duration = validTrimEnd - validTrimStart || 1;
+  const togglePlay = useCallback(() => {
+    if (!videoRef) return;
+    if (playing) {
+      videoRef.pause();
+      setPlaying(false);
+      return;
+    }
+    const active = getSegmentAtOrAfter(segments, currentTime) ?? segments[0];
+    const seekTo = active ? Math.min(active.endTime, Math.max(active.startTime, currentTime)) : safeStart;
+    videoRef.currentTime = seekTo;
+    setCurrentTime(seekTo);
+    void videoRef.play();
+    setPlaying(true);
+  }, [playing, currentTime, safeStart, segments, videoRef]);
 
-  // Start from trimStart
   useEffect(() => {
-    const v = videoRef.current;
-    if (!v) return;
-    // Validate trimStart is a finite number
-    const validStartTime = (trimStart && isFinite(trimStart)) ? trimStart : 0;
-    v.currentTime = validStartTime;
-  }, [trimStart]);
+    if (!videoRef) return;
+    const restart = segments[0]?.startTime ?? safeStart;
+    videoRef.currentTime = restart;
+    setCurrentTime(restart);
+  }, [videoRef, safeStart, segments]);
 
-  // Close on Escape
+  useEffect(() => setMuted(audioMuted), [audioMuted]);
+
   useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') onClose();
-      if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') onClose();
+      if (event.key === ' ') {
+        event.preventDefault();
+        togglePlay();
+      }
     }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  });
+  }, [onClose, togglePlay]);
 
-  function togglePlay() {
-    const v = videoRef.current;
-    if (!v) return;
-    if (playing) { v.pause(); setPlaying(false); }
-    else { v.play(); setPlaying(true); }
+  function onSeek(nextTime: number) {
+    if (!videoRef) return;
+    videoRef.currentTime = nextTime;
+    setCurrentTime(nextTime);
   }
 
   function onTimeUpdate() {
-    const v = videoRef.current;
-    if (!v) return;
-    const t = v.currentTime;
-    if (t >= validTrimEnd) {
-      v.pause();
-      v.currentTime = validTrimStart;
+    if (!videoRef) return;
+    const time = videoRef.currentTime;
+    const segmentIndex = segments.findIndex((segment) => time >= segment.startTime && time <= segment.endTime);
+    if (segmentIndex === -1) {
+      const active = getSegmentAtOrAfter(segments, time);
+      if (active) {
+        videoRef.currentTime = active.startTime;
+        setCurrentTime(active.startTime);
+        return;
+      }
+    }
+
+    const segment = segments[segmentIndex];
+    if (!segment) {
+      videoRef.pause();
       setPlaying(false);
-      setCurrentTime(validTrimStart);
+      setCurrentTime(safeStart);
       return;
     }
-    setCurrentTime(t);
-    setActiveSub(subtitles.find((c) => t >= c.startTime && t <= c.endTime) ?? null);
+    if (playing && time >= segment.endTime - 0.03) {
+      const next = segments[segmentIndex + 1];
+      if (next) {
+        videoRef.currentTime = next.startTime;
+        setCurrentTime(next.startTime);
+      } else {
+        videoRef.pause();
+        setPlaying(false);
+        setCurrentTime(segment.endTime);
+      }
+      return;
+    }
+
+    setCurrentTime(time);
   }
 
-  function seekTo(e: React.MouseEvent<HTMLDivElement>) {
-    const rect = progressRef.current?.getBoundingClientRect();
-    if (!rect || !videoRef.current) return;
-    const ratio = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
-    const validStartTime = (trimStart && isFinite(trimStart)) ? trimStart : 0;
-    const t = validStartTime + ratio * duration;
-    videoRef.current.currentTime = t;
-    setCurrentTime(t);
+  function onEnded() {
+    setPlaying(false);
   }
 
-  const progressRatio = duration > 0 ? (currentTime - trimStart) / duration : 0;
+  const progress = totalDuration ? mapSegmentTimeToLinear(segments, currentTime) / totalDuration : 0;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
-      <div
-        className="relative flex flex-col bg-[#120a02] rounded-2xl overflow-hidden shadow-2xl border border-[#3d2510]"
-        style={{
-          width: format === '9:16' ? 'min(38vw, 420px)' : 'min(80vw, 900px)',
-          maxHeight: '90vh',
-        }}
-      >
-        {/* Top bar */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-[#3d2510] shrink-0">
+      <div className="relative flex flex-col bg-[#120a02] rounded-2xl overflow-hidden shadow-2xl border border-[#3d2510] w-[96vw] sm:w-[92vw] max-w-[980px] max-h-[92vh]">
+        <header className="flex items-center justify-between px-4 py-3 border-b border-[#3d2510] shrink-0">
           <div className="flex items-center gap-2">
             <Maximize2 size={14} className="text-[#7a6040]" />
             <span className="text-[#c8b88a] text-sm font-semibold">Preview</span>
-            <span className="text-[10px] px-2 py-0.5 rounded border border-[#3d2510] text-[#7a6040]">
-              {format}
-            </span>
+            <span className="text-[10px] px-2 py-0.5 rounded border border-[#3d2510] text-[#7a6040]">{format}</span>
           </div>
           <button
             onClick={onClose}
@@ -129,137 +157,41 @@ export default function PreviewModal({
           >
             <X size={15} />
           </button>
-        </div>
+        </header>
 
-        {/* Video area */}
         <div
-          className="relative bg-black overflow-hidden shrink-0"
-          style={{ aspectRatio: FORMAT_RATIO[format] }}
+          className="relative w-full shrink overflow-hidden bg-black"
+          style={{ aspectRatio: FORMAT_RATIO[format], maxHeight: 'calc(92vh - 126px)' }}
         >
-          <video
-            ref={videoRef}
-            src={videoUrl}
-            className="w-full h-full object-contain bg-black"
+          <PreviewCanvas
+            format={format}
+            currentTime={currentTime}
+            videoUrl={videoUrl}
             muted={muted}
+            activeSub={activeSub}
+            subtitleFontFamily={subtitleFontFamily}
+            subtitleFontScale={subtitleFontScale}
+            layers={layers}
+            onRefReady={setVideoRef}
             onTimeUpdate={onTimeUpdate}
-            onEnded={() => setPlaying(false)}
+            onEnded={onEnded}
             onClick={togglePlay}
           />
-
-          {/* Canvas Layers Overlay */}
-          {layers && layers
-            .filter((layer) => layer.type !== 'audio')
-            .filter((layer) => currentTime >= layer.startTime && currentTime <= layer.endTime)
-            .map((layer) => (
-            <div
-              key={layer.id}
-              className="absolute pointer-events-none select-none"
-              style={{
-                left: `${layer.x}%`,
-                top: `${layer.y}%`,
-                width: `${layer.width}%`,
-                height: `${layer.height}%`,
-                zIndex: layer.zIndex,
-              }}
-            >
-              <div className="w-full h-full relative overflow-hidden flex items-center justify-center">
-                {layer.type === 'text' && (
-                  <div
-                    className="w-full h-full flex items-center justify-center text-center px-1"
-                    style={{ backgroundColor: layer.bgColor || '#00000000' }}
-                  >
-                    <p
-                      className="font-bold w-full break-words leading-normal"
-                      style={{
-                        fontSize: `${(layer.fontSize || 20) * 0.85}px`,
-                        color: layer.color || '#ffffff',
-                      }}
-                    >
-                      {layer.text || ''}
-                    </p>
-                  </div>
-                )}
-
-                {layer.type === 'image' && layer.src && (
-                  <img
-                    src={layer.src}
-                    alt={layer.name}
-                    className="w-full h-full object-contain"
-                  />
-                )}
-
-                {layer.type === 'video' && layer.src && (
-                  <video
-                    src={layer.src}
-                    className="w-full h-full object-contain"
-                    muted
-                    loop
-                    autoPlay
-                    playsInline
-                  />
-                )}
-              </div>
-            </div>
-          ))}
-
-          {/* Subtitle overlay */}
-          {activeSub && (
-            <div className="absolute bottom-6 left-0 right-0 flex justify-center px-6 pointer-events-none" style={{ zIndex: 9999 }}>
-              <div className="bg-black/70 text-white text-sm font-bold px-4 py-2 rounded-xl text-center max-w-full shadow-lg">
-                {activeSub.text}
-              </div>
-            </div>
-          )}
-
-          {/* Center play/pause icon (brief flash) */}
-          {!playing && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none" style={{ zIndex: 9999 }}>
-              <div className="w-16 h-16 rounded-full bg-black/50 flex items-center justify-center">
-                <Play size={28} className="text-white ml-1" />
-              </div>
-            </div>
-          )}
         </div>
 
-        {/* Controls bar */}
-        <div className="px-4 py-3 flex flex-col gap-2 shrink-0">
-          {/* Progress bar */}
-          <div
-            ref={progressRef}
-            className="h-1.5 bg-[#2d1a08] rounded-full cursor-pointer group"
-            onClick={seekTo}
-          >
-            <div
-              className="h-full bg-[#c9b600] rounded-full relative transition-all"
-              style={{ width: `${progressRatio * 100}%` }}
-            >
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-[#c9b600] rounded-full border-2 border-[#1a0c05] opacity-0 group-hover:opacity-100 transition-opacity" />
-            </div>
-          </div>
-
-          {/* Buttons */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={togglePlay}
-              className="w-8 h-8 rounded-full bg-[#c9b600] text-[#1a0c05] flex items-center justify-center hover:bg-[#e0cc00] transition-colors shrink-0"
-            >
-              {playing ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
-            </button>
-
-            <span className="text-[#7a6040] text-xs font-mono">
-              {formatTime(currentTime)} / {formatTime(trimEnd)}
-            </span>
-
-            <div className="flex-1" />
-
-            <button
-              onClick={() => { setMuted(!muted); }}
-              className="w-7 h-7 rounded-lg flex items-center justify-center text-[#7a6040] hover:text-[#c8b88a] hover:bg-[#2d1a08] transition-colors"
-            >
-              {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-            </button>
-          </div>
-        </div>
+        <PreviewFooter
+          progress={progress}
+          currentTime={currentTime}
+          totalDuration={totalDuration}
+          startAt={safeStart}
+          playing={playing}
+          muted={muted}
+          onTogglePlay={togglePlay}
+          onSeek={(linearTime) => onSeek(mapLinearToSegmentTime(segments, linearTime - safeStart))}
+          onToggleMute={() => setMuted((prev) => !prev)}
+          onExportSrt={() => downloadTextFile(buildSRT(subtitles), 'subtitles.srt', 'text/plain')}
+          onExportVtt={() => downloadTextFile(buildVTT(subtitles), 'subtitles.vtt', 'text/vtt')}
+        />
       </div>
     </div>
   );
