@@ -1,6 +1,6 @@
 'use client';
 
-import { Download, Eye, Zap } from 'lucide-react';
+import { Download, Eye, UploadCloud, Zap } from 'lucide-react';
 import { VideoFormat } from '@/types/editor';
 
 const FORMATS: VideoFormat[] = ['16:9', '9:16', '1:1'];
@@ -11,6 +11,7 @@ interface EditorHeaderProps {
   onTitleChange: (title: string) => void;
   onFormatChange: (format: VideoFormat) => void;
   onPreviewOpen: () => void;
+  onImport: () => void;
 }
 
 export default function EditorHeader({
@@ -19,6 +20,7 @@ export default function EditorHeader({
   onTitleChange,
   onFormatChange,
   onPreviewOpen,
+  onImport,
 }: EditorHeaderProps) {
   return (
     <header className="min-h-14 bg-[#120a02] border-b border-[#3d2510] px-4 py-2 shrink-0">
@@ -63,6 +65,13 @@ export default function EditorHeader({
             <Eye size={14} />
             Preview
           </button>
+          <button
+            onClick={onImport}
+            className="flex items-center gap-1.5 border border-[#3d2510] px-3 py-1.5 rounded-lg text-[#c8b88a] text-sm font-semibold hover:border-[#c9b600] hover:text-[#e8d5a0] transition-colors"
+          >
+            <UploadCloud size={14} />
+            Import
+          </button>
           <button className="flex items-center gap-1.5 bg-[#c9b600] text-[#1a0c05] font-semibold text-sm px-3 py-1.5 rounded-lg hover:bg-[#e0cc00] transition-colors">
             Export
             <Download size={14} />
@@ -72,4 +81,3 @@ export default function EditorHeader({
     </header>
   );
 }
-

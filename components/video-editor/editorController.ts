@@ -6,6 +6,7 @@ import { usePlaybackControllers } from './videoEditorPlayback';
 import { useLayerControllers } from './videoEditorLayers';
 import { useSubtitleControllers } from './videoEditorSubtitles';
 import { getTrimSegments } from './segments';
+import { loadEditorDraft } from '@/lib/editorDraft';
 
 export interface VideoEditorController {
   state: EditorState;
@@ -37,6 +38,9 @@ export interface VideoEditorController {
   handleSubtitlesChange: (chunks: EditorState['subtitles']) => void;
   handleTranscribeLanguageChange: (language: 'en' | 'ur' | 'auto') => void;
   handleAutoTranscribe: () => Promise<void>;
+  handleTranscribePause: () => void;
+  handleTranscribeResume: () => void;
+  handleTranscribeCancel: () => void;
   handleAudioMuteToggle: () => void;
   handleAudioRemove: () => void;
   handleSubtitleFontScaleChange: (scalePercent: number) => void;
@@ -45,8 +49,23 @@ export interface VideoEditorController {
 }
 
 export default function useVideoEditorController(): VideoEditorController {
-  const [state, setState] = useState<EditorState>(initialState);
-  const [title, setTitle] = useState('My Video Draft');
+  const restoredDraft = typeof window === 'undefined' ? null : loadEditorDraft();
+  const [state, setState] = useState<EditorState>(() => restoredDraft ? {
+    ...initialState,
+    videoUrl: restoredDraft.videoUrl,
+    duration: restoredDraft.duration,
+    currentTime: restoredDraft.trimStart || 0,
+    trimStart: restoredDraft.trimStart,
+    trimEnd: restoredDraft.trimEnd,
+    subtitles: restoredDraft.subtitles,
+    hasAudio: restoredDraft.hasAudio,
+    audioMuted: restoredDraft.audioMuted,
+    subtitleFontScale: restoredDraft.subtitleFontScale,
+    subtitleFontFamily: restoredDraft.subtitleFontFamily,
+    format: restoredDraft.format,
+    layers: restoredDraft.layers,
+  } : initialState);
+  const [title, setTitle] = useState(restoredDraft?.title ?? 'My Video Draft');
   const [waveformData, setWaveformData] = useState<Float32Array | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -136,6 +155,9 @@ export default function useVideoEditorController(): VideoEditorController {
     handleSubtitlesChange: subtitles.handleSubtitlesChange,
     handleTranscribeLanguageChange: subtitles.handleTranscribeLanguageChange,
     handleAutoTranscribe: subtitles.handleAutoTranscribe,
+    handleTranscribePause: subtitles.handleTranscribePause,
+    handleTranscribeResume: subtitles.handleTranscribeResume,
+    handleTranscribeCancel: subtitles.handleTranscribeCancel,
     handleAudioMuteToggle: subtitles.handleAudioMuteToggle,
     handleAudioRemove: subtitles.handleAudioRemove,
     handleSubtitleFontScaleChange: subtitles.handleSubtitleFontScaleChange,

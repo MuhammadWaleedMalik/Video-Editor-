@@ -4,6 +4,8 @@ import { formatTime } from './videoCanvas';
 interface VideoPlaybackControlsProps {
   playbackRate: number;
   currentTime: number;
+  trimStart: number;
+  trimEnd: number;
   audioMuted: boolean;
   isPlaying: boolean;
   onReset: () => void;
@@ -15,6 +17,8 @@ interface VideoPlaybackControlsProps {
 export default function VideoPlaybackControls({
   playbackRate,
   currentTime,
+  trimStart,
+  trimEnd,
   audioMuted,
   isPlaying,
   onReset,
@@ -22,6 +26,9 @@ export default function VideoPlaybackControls({
   onPlayPause,
   onSpeedChange,
 }: VideoPlaybackControlsProps) {
+  const trimmedTime = Math.max(0, currentTime - trimStart);
+  const trimmedDuration = Math.max(0, trimEnd - trimStart);
+
   return (
     <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-t border-[#3d2510]/60 px-1 pt-2 sm:gap-3">
       <button
@@ -56,7 +63,9 @@ export default function VideoPlaybackControls({
         <option value={1.5}>1.5x</option>
         <option value={2}>2x</option>
       </select>
-      <span className="text-[#7a6040] text-xs font-mono">{formatTime(currentTime)}</span>
+      <span className="text-[#7a6040] text-xs font-mono">
+        {formatTime(trimmedTime)} / {formatTime(trimmedDuration)}
+      </span>
     </div>
   );
 }

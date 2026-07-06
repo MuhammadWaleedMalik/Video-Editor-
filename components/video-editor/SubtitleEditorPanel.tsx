@@ -1,12 +1,13 @@
 'use client';
 
 import { useRef } from 'react';
-import { Edit3, Loader2, Upload, Wand2 } from 'lucide-react';
+import { Edit3, Upload } from 'lucide-react';
 import { ChangeEvent } from 'react';
 import { parseSubtitleFile } from '@/lib/subtitle-parser';
 import { TEXT_THEMES } from '@/lib/textThemes';
 import { SubtitleChunk } from '@/types/editor';
 import SubtitleChunkList from './SubtitleChunkList';
+import TranscriptionControls from './TranscriptionControls';
 
 interface SubtitleEditorPanelProps {
   subtitles: SubtitleChunk[];
@@ -19,6 +20,9 @@ interface SubtitleEditorPanelProps {
   onSubtitlesChange: (chunks: SubtitleChunk[]) => void;
   onSeek: (time: number) => void;
   onAutoTranscribe: () => void;
+  onTranscribePause: () => void;
+  onTranscribeResume: () => void;
+  onTranscribeCancel: () => void;
   onTranscribeLanguageChange: (language: 'en' | 'ur' | 'auto') => void;
   onSubtitleFontScaleChange: (scalePercent: number) => void;
   onSubtitleFontFamilyChange: (fontFamily: string) => void;
@@ -35,6 +39,9 @@ export default function SubtitleEditorPanel({
   onSubtitlesChange,
   onSeek,
   onAutoTranscribe,
+  onTranscribePause,
+  onTranscribeResume,
+  onTranscribeCancel,
   onTranscribeLanguageChange,
   onSubtitleFontScaleChange,
   onSubtitleFontFamilyChange,
@@ -141,20 +148,14 @@ export default function SubtitleEditorPanel({
           <option value="ur">Urdu</option>
         </select>
 
-        <button
-          onClick={onAutoTranscribe}
-          disabled={isTranscribing}
-          className={`w-full flex items-center justify-center gap-2 text-xs py-2 rounded-lg transition-colors ${
-            isTranscribing
-              ? 'bg-[#2d1a08] border border-[#4a3010] text-[#9a8060] cursor-not-allowed'
-              : 'bg-[#1f1005] border border-[#3d2510] hover:border-[#7a6040] text-[#7a6040] hover:text-[#c8b88a]'
-          }`}
-        >
-          {isTranscribing ? <Loader2 size={12} className="animate-spin text-[#c9b600]" /> : <Wand2 size={12} />}
-          {isTranscribing ? 'Transcribing...' : 'Auto Transcribe'}
-        </button>
-
-        {!!transcribeStatus && <p className="text-[10px] text-[#9a8060]">{transcribeStatus}</p>}
+        <TranscriptionControls
+          isTranscribing={isTranscribing}
+          status={transcribeStatus}
+          onAutoTranscribe={onAutoTranscribe}
+          onPause={onTranscribePause}
+          onResume={onTranscribeResume}
+          onCancel={onTranscribeCancel}
+        />
 
         <button
           className="w-full flex items-center justify-center gap-2 bg-[#1f1005] border border-[#3d2510] hover:border-[#7a6040] text-[#7a6040] hover:text-[#c8b88a] text-xs py-2 rounded-lg transition-colors"

@@ -64,24 +64,22 @@ export default function TimelineRows({
             style={{ left: timeToPercent(trimEnd), right: 0 }}
           />
 
-          {trimStart > 0 || trimEnd < dur ? (
-            <div
-              className="absolute inset-y-0 w-2.5 bg-[#c9b600] rounded-l cursor-ew-resize z-30 flex items-center justify-center hover:bg-[#e0cc00] transition-colors"
-              style={{ left: timeToPercent(trimStart) }}
-              onMouseDown={(e) => { e.stopPropagation(); onMouseDown(e, 'trim-start'); }}
-            >
-              <div className="w-px h-3 bg-[#1a0c05]" />
-            </div>
-          ) : null}
-          {trimEnd < dur ? (
-            <div
-              className="absolute inset-y-0 w-2.5 bg-[#c9b600] rounded-r cursor-ew-resize z-30 flex items-center justify-center hover:bg-[#e0cc00] transition-colors -translate-x-full"
-              style={{ left: timeToPercent(trimEnd) }}
-              onMouseDown={(e) => { e.stopPropagation(); onMouseDown(e, 'trim-end'); }}
-            >
-              <div className="w-px h-3 bg-[#1a0c05]" />
-            </div>
-          ) : null}
+          <div
+            className="absolute inset-y-0 w-3 bg-[#c9b600] rounded-l cursor-ew-resize z-30 flex items-center justify-center hover:bg-[#e0cc00] transition-colors"
+            style={{ left: timeToPercent(trimStart) }}
+            onMouseDown={(e) => { e.stopPropagation(); onMouseDown(e, 'trim-start'); }}
+            title="Trim start"
+          >
+            <div className="w-px h-3 bg-[#1a0c05]" />
+          </div>
+          <div
+            className="absolute inset-y-0 w-3 bg-[#c9b600] rounded-r cursor-ew-resize z-30 flex items-center justify-center hover:bg-[#e0cc00] transition-colors -translate-x-full"
+            style={{ left: timeToPercent(trimEnd) }}
+            onMouseDown={(e) => { e.stopPropagation(); onMouseDown(e, 'trim-end'); }}
+            title="Trim end"
+          >
+            <div className="w-px h-3 bg-[#1a0c05]" />
+          </div>
 
           <Playhead left={timeToPercent(currentTime)} />
         </div>
@@ -114,12 +112,28 @@ export default function TimelineRows({
       >
         <div className="relative w-full h-full bg-[#1a0f04] rounded overflow-hidden">
           {audioTrackContent}
+          <div
+            className="absolute inset-y-0 bg-[#0e0702] opacity-70 rounded-l z-10"
+            style={{ left: 0, width: timeToPercent(trimStart) }}
+          />
+          <div
+            className="absolute inset-y-0 bg-[#0e0702] opacity-70 rounded-r z-10"
+            style={{ left: timeToPercent(trimEnd), right: 0 }}
+          />
           <Playhead left={timeToPercent(currentTime)} />
         </div>
       </TrackRow>
 
       <TrackRow label="Subs" contentWidth={timelineWidth}>
         <div className="relative w-full h-full bg-[#1a0f04] rounded overflow-hidden">
+          <div
+            className="absolute inset-y-0 bg-[#0e0702] opacity-70 rounded-l z-10"
+            style={{ left: 0, width: timeToPercent(trimStart) }}
+          />
+          <div
+            className="absolute inset-y-0 bg-[#0e0702] opacity-70 rounded-r z-10"
+            style={{ left: timeToPercent(trimEnd), right: 0 }}
+          />
           {subtitles.map((chunk) => {
             const left = `${(chunk.startTime / dur) * 100}%`;
             const width = `${((chunk.endTime - chunk.startTime) / dur) * 100}%`;
@@ -128,7 +142,7 @@ export default function TimelineRows({
               <div
                 key={chunk.id}
                 title={chunk.text}
-                className={`absolute inset-y-1 rounded ${isActive ? 'bg-[#c9b600]' : 'bg-[#8b8c20]'}`}
+                className={`absolute inset-y-1 z-20 rounded ${isActive ? 'bg-[#c9b600]' : 'bg-[#8b8c20]'}`}
                 style={{ left, width: `max(4px, ${width})` }}
               />
             );
@@ -141,6 +155,8 @@ export default function TimelineRows({
         layers={layers}
         currentTime={currentTime}
         duration={Math.max(0.001, dur)}
+        trimStart={trimStart}
+        trimEnd={trimEnd}
         selectedLayerId={selectedLayerId}
         timeToPercent={timeToPercent}
         onLayerOrderChange={onLayerOrderChange}

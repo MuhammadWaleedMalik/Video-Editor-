@@ -10,10 +10,15 @@ export interface EditorDraftPayload {
   subtitles: SubtitleChunk[];
   hasAudio: boolean;
   audioMuted: boolean;
+  subtitleFontScale: number;
+  subtitleFontFamily: string;
   layers: Layer[];
   videoFileName: string | null;
+  videoUrl: string | null;
   videoSourceHint: string | null;
 }
+
+export const IMPORTED_DRAFT_KEY = 'cvvid-imported-draft';
 
 export function buildEditorDraft(state: EditorState, title: string): EditorDraftPayload {
   return {
@@ -26,8 +31,30 @@ export function buildEditorDraft(state: EditorState, title: string): EditorDraft
     subtitles: state.subtitles,
     hasAudio: state.hasAudio,
     audioMuted: state.audioMuted,
+    subtitleFontScale: state.subtitleFontScale,
+    subtitleFontFamily: state.subtitleFontFamily,
     layers: state.layers.map((layer) => ({ ...layer })),
     videoFileName: state.videoFile?.name ?? null,
+    videoUrl: state.videoUrl,
     videoSourceHint: state.videoUrl ? 'blob-source' : null,
   };
+}
+
+export function saveEditorDraft(draft: EditorDraftPayload) {
+  sessionStorage.setItem(IMPORTED_DRAFT_KEY, JSON.stringify(draft));
+}
+
+export function loadEditorDraft(): EditorDraftPayload | null {
+  if (typeof window === 'undefined') return null;
+  const raw = sessionStorage.getItem(IMPORTED_DRAFT_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as EditorDraftPayload;
+  } catch {
+    return null;
+  }
+}
+
+export function clearEditorDraft() {
+  sessionStorage.removeItem(IMPORTED_DRAFT_KEY);
 }

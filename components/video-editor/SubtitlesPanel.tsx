@@ -17,6 +17,9 @@ interface SubtitlesPanelProps {
   onDeleteLayer: (id: string) => void;
   onSelectLayer: (id: string | null) => void;
   onAutoTranscribe: () => void;
+  onTranscribePause: () => void;
+  onTranscribeResume: () => void;
+  onTranscribeCancel: () => void;
   transcribeStatus: string;
   isTranscribing: boolean;
   transcribeLanguage: 'en' | 'ur' | 'auto';
@@ -39,6 +42,9 @@ export default function SubtitlesPanel({
   onDeleteLayer,
   onSelectLayer,
   onAutoTranscribe,
+  onTranscribePause,
+  onTranscribeResume,
+  onTranscribeCancel,
   transcribeStatus,
   isTranscribing,
   transcribeLanguage,
@@ -74,6 +80,9 @@ export default function SubtitlesPanel({
       onSubtitlesChange={onSubtitlesChange}
       onSeek={onSeek}
       onAutoTranscribe={onAutoTranscribe}
+      onTranscribePause={onTranscribePause}
+      onTranscribeResume={onTranscribeResume}
+      onTranscribeCancel={onTranscribeCancel}
       onTranscribeLanguageChange={onTranscribeLanguageChange}
       onSubtitleFontScaleChange={onSubtitleFontScaleChange}
       onSubtitleFontFamilyChange={onSubtitleFontFamilyChange}

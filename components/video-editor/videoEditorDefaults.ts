@@ -1,6 +1,6 @@
 import { EditorState, Layer, LayerType } from '@/types/editor';
 
-export const TRANSCRIBE_MODEL = 'Xenova/whisper-small';
+export const TRANSCRIBE_MODEL = 'onnx-community/whisper-base';
 
 export const initialState: EditorState = {
   videoFile: null,

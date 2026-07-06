@@ -6,6 +6,8 @@ interface TimelineLayerOrderProps {
   layers: Layer[];
   currentTime: number;
   duration: number;
+  trimStart: number;
+  trimEnd: number;
   selectedLayerId: string | null;
   timeToPercent: (time: number) => string;
   onLayerOrderChange: (id: string, direction: 'front' | 'back') => void;
@@ -86,6 +88,8 @@ export default function TimelineLayerOrder({
   layers,
   currentTime,
   duration,
+  trimStart,
+  trimEnd,
   selectedLayerId,
   timeToPercent,
   onLayerOrderChange,
@@ -116,6 +120,14 @@ export default function TimelineLayerOrder({
                 className="relative h-10 mb-2 rounded bg-[#1a0f04] overflow-hidden"
                 title={`Layer position: ${ordered.length - orderIndex} (top = front)`}
               >
+                <div
+                  className="absolute inset-y-0 bg-[#0e0702] opacity-70 rounded-l z-10"
+                  style={{ left: 0, width: timeToPercent(trimStart) }}
+                />
+                <div
+                  className="absolute inset-y-0 bg-[#0e0702] opacity-70 rounded-r z-10"
+                  style={{ left: timeToPercent(trimEnd), right: 0 }}
+                />
                 <Playhead left={timeToPercent(currentTime)} />
                 <div
                   className={`absolute inset-y-1 rounded border ${
@@ -123,7 +135,7 @@ export default function TimelineLayerOrder({
                       ? 'bg-[#c9b600] border-[#f0dd2a] text-[#1a0c05]'
                       : 'bg-[#3b360d] border-[#7b7d20] text-[#e8d5a0] hover:border-[#c9b600]'
                   }`}
-                  style={{ left, width: `max(28px, ${width})` }}
+                  style={{ left, width: `max(28px, ${width})`, zIndex: 20 }}
                   onMouseDown={(e) => onLayerMouseDown(e, layer, 'move')}
                 >
                   <div

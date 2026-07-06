@@ -1,11 +1,13 @@
 export type VideoFormat = '16:9' | '9:16' | '1:1';
 
-export interface SubtitleChunk {
+// src/types/editor.ts
+
+export type SubtitleChunk = {
   id: string;
   startTime: number;
   endTime: number;
   text: string;
-}
+};
 
 export type LayerType = 'image' | 'video' | 'text' | 'audio';
 

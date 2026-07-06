@@ -11,6 +11,8 @@ interface VideoPreviewProps {
   videoUrl: string;
   isPlaying: boolean;
   currentTime: number;
+  trimStart: number;
+  trimEnd: number;
   subtitles: SubtitleChunk[];
   format: VideoFormat;
   onPlayPause: () => void;
@@ -34,6 +36,8 @@ export default function VideoPreview({
   videoUrl,
   isPlaying,
   currentTime,
+  trimStart,
+  trimEnd,
   subtitles,
   format,
   onPlayPause,
@@ -98,10 +102,12 @@ export default function VideoPreview({
       <VideoPlaybackControls
         playbackRate={playbackRate}
         currentTime={currentTime}
+        trimStart={trimStart}
+        trimEnd={trimEnd}
         audioMuted={audioMuted}
         isPlaying={isPlaying}
         onReset={() => {
-          if (videoRef.current) videoRef.current.currentTime = 0;
+          if (videoRef.current) videoRef.current.currentTime = trimStart;
         }}
         onToggleMute={onToggleMute}
         onPlayPause={onPlayPause}
@@ -115,7 +121,13 @@ export default function VideoPreview({
         muted={audioMuted}
         onTimeUpdate={(e) => onTimeUpdate(e.currentTarget.currentTime)}
         onDurationChange={(e) => onDurationChange(e.currentTarget.duration)}
-        onLoadedData={() => refs.drawFrame()}
+        onLoadedData={(e) => {
+          const video = e.currentTarget;
+          if (video.currentTime < trimStart || video.currentTime > trimEnd) {
+            video.currentTime = trimStart;
+          }
+          refs.drawFrame();
+        }}
         onSeeked={() => refs.drawFrame()}
       />
     </div>

@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import EditorHeader from './EditorHeader';
 import LeftSidebar from './LeftSidebar';
 import VideoPreview from './VideoPreview';
@@ -8,10 +9,18 @@ import Timeline from './Timeline';
 import VideoUpload from './VideoUpload';
 import PreviewModal from './PreviewModal';
 import useVideoEditorController from './editorController';
+import { buildEditorDraft, saveEditorDraft } from '@/lib/editorDraft';
 
 export default function VideoEditor() {
+  const router = useRouter();
   const editor = useVideoEditorController();
   const hasVideo = Boolean(editor.state.videoUrl);
+
+  function handleImport() {
+    if (!editor.state.videoUrl) return;
+    saveEditorDraft(buildEditorDraft(editor.state, editor.title));
+    router.push('/import');
+  }
 
   return (
     <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#1a0c05]">
@@ -21,6 +30,7 @@ export default function VideoEditor() {
         onTitleChange={editor.setTitle}
         onFormatChange={editor.handleFormatChange}
         onPreviewOpen={() => editor.setShowPreview(true)}
+        onImport={handleImport}
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto md:overflow-hidden">
@@ -41,6 +51,8 @@ export default function VideoEditor() {
                 videoUrl={editor.state.videoUrl!}
                 isPlaying={editor.state.isPlaying}
                 currentTime={editor.state.currentTime}
+                trimStart={editor.state.trimStart}
+                trimEnd={editor.state.trimEnd || editor.state.duration}
                 subtitles={editor.state.subtitles}
                 format={editor.state.format}
                 onPlayPause={editor.handlePlayPause}
@@ -74,6 +86,9 @@ export default function VideoEditor() {
               isTranscribing={editor.isTranscribing}
               transcribeStatus={editor.transcribeStatus}
               onAutoTranscribe={editor.handleAutoTranscribe}
+              onTranscribePause={editor.handleTranscribePause}
+              onTranscribeResume={editor.handleTranscribeResume}
+              onTranscribeCancel={editor.handleTranscribeCancel}
               transcribeLanguage={editor.transcribeLanguage}
               onTranscribeLanguageChange={editor.handleTranscribeLanguageChange}
               subtitleFontScale={editor.state.subtitleFontScale}

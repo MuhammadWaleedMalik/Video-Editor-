@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { EditorState, VideoFormat } from '@/types/editor';
-import { getSegmentAtOrAfter, getSegmentIndex, getTrimSegments, sanitizeTrimRange } from './segments';
+import { getSegmentIndex, sanitizeTrimRange } from './segments';
 
 export interface PlaybackControllers {
   trimSegments: Array<{ startTime: number; endTime: number }>;
@@ -23,6 +23,11 @@ export function usePlaybackControllers(
     setState({ ...patch });
   }, [setState]);
 
+  function clampToTrim(time: number) {
+    const range = sanitizeTrimRange(state.duration, state.trimStart, state.trimEnd);
+    return Math.max(range.trimStart, Math.min(time, range.trimEnd));
+  }
+
   function handlePlayPause() {
     const v = videoRef.current;
     if (!v) return;
@@ -32,18 +37,11 @@ export function usePlaybackControllers(
       return;
     }
 
-    const next = getSegmentAtOrAfter(trimSegments, state.currentTime);
-    if (state.duration && state.currentTime >= state.trimEnd) {
-      v.currentTime = state.trimStart;
-      set({ currentTime: state.trimStart });
-    } else if (next && next.startTime >= 0) {
-      const seekTo = state.currentTime < next.startTime ? next.startTime : state.currentTime;
-      v.currentTime = seekTo;
-      set({ currentTime: seekTo });
-    } else {
-      v.currentTime = state.trimStart;
-      set({ currentTime: state.trimStart });
-    }
+    const range = sanitizeTrimRange(state.duration, state.trimStart, state.trimEnd);
+    const inTrim = state.currentTime >= range.trimStart && state.currentTime < range.trimEnd;
+    const seekTo = inTrim ? state.currentTime : range.trimStart;
+    v.currentTime = seekTo;
+    set({ currentTime: seekTo });
 
     if (!trimSegments.length) return;
     v.play().then(() => set({ isPlaying: true })).catch(() => set({ isPlaying: false }));
@@ -51,7 +49,7 @@ export function usePlaybackControllers(
 
   function handleTimeUpdate(time: number) {
     const video = videoRef.current;
-    const { trimEnd } = sanitizeTrimRange(state.duration, state.trimStart, state.trimEnd);
+    const { trimStart, trimEnd } = sanitizeTrimRange(state.duration, state.trimStart, state.trimEnd);
     const segmentIndex = getSegmentIndex(trimSegments, time);
 
     if (!trimSegments.length) {
@@ -59,16 +57,20 @@ export function usePlaybackControllers(
       return;
     }
 
+    if (time < trimStart) {
+      if (video) video.currentTime = trimStart;
+      set({ currentTime: trimStart });
+      return;
+    }
+
     if (segmentIndex === -1) {
-      const next = trimSegments.find((segment) => segment.startTime > time);
-      if (next && video && state.isPlaying) {
-        video.currentTime = next.startTime;
+      if (time > trimEnd && video) {
+        video.pause();
+        video.currentTime = trimEnd;
+        set({ isPlaying: false, currentTime: trimEnd });
         return;
       }
-      if (!state.isPlaying) {
-        const active = getSegmentAtOrAfter(trimSegments, time);
-        set({ currentTime: active?.startTime ?? state.currentTime });
-      }
+      set({ currentTime: clampToTrim(time) });
       return;
     }
 
@@ -106,12 +108,7 @@ export function usePlaybackControllers(
   }
 
   function handleSeek(time: number) {
-    const targetSegment = getSegmentAtOrAfter(trimSegments, time);
-    const seekTo = targetSegment
-      ? time < targetSegment.startTime
-        ? targetSegment.startTime
-        : Math.min(time, targetSegment.endTime)
-      : state.currentTime;
+    const seekTo = clampToTrim(time);
     if (videoRef.current) videoRef.current.currentTime = seekTo;
     set({ currentTime: seekTo });
   }
@@ -122,8 +119,7 @@ export function usePlaybackControllers(
 
   function handleTrimChange(start: number, end: number) {
     const range = sanitizeTrimRange(state.duration, start, end);
-    const next = getSegmentAtOrAfter(getTrimSegments(state.duration, range.trimStart, range.trimEnd), state.currentTime);
-    const nextCurrentTime = next ? Math.min(state.currentTime, next.endTime) : range.trimStart;
+    const nextCurrentTime = Math.max(range.trimStart, Math.min(state.currentTime, range.trimEnd));
     set({ trimStart: range.trimStart, trimEnd: range.trimEnd, currentTime: nextCurrentTime });
     if (videoRef.current) videoRef.current.currentTime = nextCurrentTime;
   }
