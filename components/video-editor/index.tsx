@@ -1,15 +1,16 @@
 'use client';
 
 import { useState, useRef, useCallback } from 'react';
-import { EditorState, SubtitleChunk, SplitPoint, SmartTrimSegment, VideoFormat, Layer } from '@/types/editor';
+import { EditorState, SubtitleChunk, VideoFormat, Layer, LayerType } from '@/types/editor';
 import EditorHeader from './EditorHeader';
 import LeftSidebar from './LeftSidebar';
 import VideoPreview from './VideoPreview';
-import AIToolsPanel from './AIToolsPanel';
 import SubtitlesPanel from './SubtitlesPanel';
 import Timeline from './Timeline';
 import VideoUpload from './VideoUpload';
 import PreviewModal from './PreviewModal';
+import { extractAudioTrack, transcribeAudio } from '@/utils/transcribeVideo';
+import { Toaster, toast } from 'sonner';
 
 const initialState: EditorState = {
   videoFile: null,
@@ -19,15 +20,10 @@ const initialState: EditorState = {
   isPlaying: false,
   trimStart: 0,
   trimEnd: 0,
-  splitPoints: [],
   subtitles: [],
   hasAudio: false,
   audioMuted: false,
-  bgBlurEnabled: false,
-  activePanel: 'ai',
   format: '16:9',
-  noiseRemoveApplied: false,
-  smartTrimSegments: [],
   layers: [],
   selectedLayerId: null,
 };
@@ -59,60 +55,15 @@ async function extractWaveform(url: string): Promise<Float32Array | null> {
   }
 }
 
-/** Simulate smart trim: detect "silence" zones and split/trim accordingly */
-function simulateSmartTrim(duration: number): {
-  splitPoints: SplitPoint[];
-  trimStart: number;
-  trimEnd: number;
-  segments: SmartTrimSegment[];
-} {
-  // Generate 3-5 evenly-distributed split points with small jitter
-  const count = Math.max(2, Math.min(5, Math.floor(duration / 12)));
-  const points: SplitPoint[] = [];
-  const segments: SmartTrimSegment[] = [];
-
-  let prev = 0;
-  for (let i = 1; i <= count; i++) {
-    const base = (duration / (count + 1)) * i;
-    const jitter = (Math.random() - 0.5) * Math.min(6, duration * 0.08);
-    const t = Math.max(2, Math.min(duration - 2, base + jitter));
-    points.push({ id: crypto.randomUUID(), time: t, type: 'smart' });
-
-    // Alternate keep / silence segments
-    const keep = i % 2 === 1;
-    segments.push({
-      id: crypto.randomUUID(),
-      startTime: prev,
-      endTime: t,
-      keep,
-    });
-    prev = t;
-  }
-  segments.push({
-    id: crypto.randomUUID(),
-    startTime: prev,
-    endTime: duration,
-    keep: true,
-  });
-
-  // Trim silence at start (0-2 s) and end (0-3 s)
-  const trimStart = Math.round(Math.random() * 1.5 * 10) / 10;
-  const trimEnd = duration - Math.round(Math.random() * 2.5 * 10) / 10;
-
-  return {
-    splitPoints: points.sort((a, b) => a.time - b.time),
-    trimStart,
-    trimEnd,
-    segments,
-  };
-}
-
 export default function VideoEditor() {
   const [state, setState] = useState<EditorState>(initialState);
   const [title, setTitle] = useState('My Video — Draft');
   const [waveformData, setWaveformData] = useState<Float32Array | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const [transcriptionStatus, setTranscriptionStatus] = useState('');
+  const [whisperModel, setWhisperModel] = useState<'Xenova/whisper-tiny' | 'Xenova/whisper-small'>('Xenova/whisper-tiny');
 
   const set = useCallback((patch: Partial<EditorState>) => {
     setState((prev) => ({ ...prev, ...patch }));
@@ -131,11 +82,8 @@ export default function VideoEditor() {
       duration: 0,
       trimStart: 0,
       trimEnd: 0,
-      splitPoints: [],
       hasAudio: true,
       audioMuted: false,
-      noiseRemoveApplied: false,
-      smartTrimSegments: [],
     });
     extractWaveform(url).then((data) => { if (data) setWaveformData(data); });
   }
@@ -182,41 +130,29 @@ export default function VideoEditor() {
     set({ trimStart: start, trimEnd: end });
   }
 
-  function handleSplit() {
-    if (!state.duration) return;
-    const point: SplitPoint = { id: crypto.randomUUID(), time: state.currentTime, type: 'manual' };
-    set({ splitPoints: [...state.splitPoints, point] });
-  }
-
-  /* ── AI tools ── */
-  async function handleNoiseRemove(): Promise<void> {
-    if (state.noiseRemoveApplied) {
-      set({ noiseRemoveApplied: false });
-    } else {
-      // Simulate 1.8 s processing
-      await new Promise((r) => setTimeout(r, 1800));
-      set({ noiseRemoveApplied: true });
-    }
-  }
-
-  async function handleSmartTrim(): Promise<void> {
-    if (!state.duration) return;
-    // Simulate analysis delay
-    await new Promise((r) => setTimeout(r, 2000));
-    const result = simulateSmartTrim(state.duration);
-    set({
-      splitPoints: result.splitPoints,
-      trimStart: result.trimStart,
-      trimEnd: result.trimEnd,
-      smartTrimSegments: result.segments,
-    });
-    if (videoRef.current) videoRef.current.currentTime = result.trimStart;
-  }
-
   /* ── Canvas Layers ── */
-  function createDefaultLayer(type: 'image' | 'video' | 'text', count: number, x = 30, y = 30): Layer {
+  function createDefaultLayer(type: LayerType, count: number, x = 30, y = 30): Layer {
     const id = crypto.randomUUID();
+    const startTime = Math.max(0, state.currentTime);
+    const fallbackEnd = startTime + 5;
+    const endTime = state.duration > 0 ? Math.min(state.duration, Math.max(startTime + 0.5, fallbackEnd)) : fallbackEnd;
+    const label = type === 'audio' ? 'Audio' : `${type[0].toUpperCase()}${type.slice(1)}`;
+
     switch (type) {
+      case 'audio':
+        return {
+          id,
+          type,
+          x,
+          y,
+          width: 18,
+          height: 18,
+          zIndex: count + 1,
+          name: `${label} ${count + 1}`,
+          startTime,
+          endTime,
+          src: '',
+        };
       case 'text':
         return {
           id,
@@ -226,7 +162,9 @@ export default function VideoEditor() {
           width: 40,
           height: 12,
           zIndex: count + 1,
-          name: `Text ${count + 1}`,
+          name: `${label} ${count + 1}`,
+          startTime,
+          endTime,
           text: 'Double click to edit text',
           fontSize: 20,
           color: '#ffffff',
@@ -241,7 +179,9 @@ export default function VideoEditor() {
           width: 35,
           height: 35,
           zIndex: count + 1,
-          name: `Image ${count + 1}`,
+          name: `${label} ${count + 1}`,
+          startTime,
+          endTime,
           src: '', // empty for placeholder
         };
       case 'video':
@@ -253,13 +193,15 @@ export default function VideoEditor() {
           width: 40,
           height: 40,
           zIndex: count + 1,
-          name: `Video ${count + 1}`,
+          name: `${label} ${count + 1}`,
+          startTime,
+          endTime,
           src: '', // empty for placeholder
         };
     }
   }
 
-  function handleAddLayer(type: 'image' | 'video' | 'text') {
+  function handleAddLayer(type: LayerType) {
     const newLayer = createDefaultLayer(type, state.layers.length);
     set({
       layers: [...state.layers, newLayer],
@@ -267,7 +209,7 @@ export default function VideoEditor() {
     });
   }
 
-  function handleAddLayerAtCoords(type: 'image' | 'video' | 'text', x: number, y: number) {
+  function handleAddLayerAtCoords(type: Exclude<LayerType, 'audio'>, x: number, y: number) {
     const newLayer = createDefaultLayer(type, state.layers.length, x, y);
     set({
       layers: [...state.layers, newLayer],
@@ -292,9 +234,52 @@ export default function VideoEditor() {
     set({ selectedLayerId: id });
   }
 
+  function handleLayerTimingChange(id: string, startTime: number, endTime: number) {
+    set({
+      layers: state.layers.map((layer) =>
+        layer.id === id ? { ...layer, startTime, endTime } : layer
+      ),
+    });
+  }
+
+  function handleLayerZIndexChange(id: string, zIndex: number) {
+    set({
+      layers: state.layers.map((layer) => {
+        if (layer.id !== id) return layer;
+        return { ...layer, zIndex: Math.max(1, Math.floor(zIndex)) };
+      }),
+    });
+  }
+
   /* ── Subtitles ── */
   function handleSubtitlesChange(chunks: SubtitleChunk[]) {
     set({ subtitles: chunks });
+  }
+
+  async function handleAutoTranscribe() {
+    if (!state.videoFile) {
+      toast.error('No video file loaded.');
+      return;
+    }
+    setIsTranscribing(true);
+    setTranscriptionStatus('Initializing Web Audio...');
+    try {
+      setTranscriptionStatus('Extracting audio track from media...');
+      const audioData = await extractAudioTrack(state.videoFile);
+      const transcribedSubs = await transcribeAudio(
+        audioData,
+        whisperModel,
+        (status) => setTranscriptionStatus(status)
+      );
+      handleSubtitlesChange(transcribedSubs);
+      toast.success(`Whisper transcription completed! Created ${transcribedSubs.length} subtitle cues.`);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Speech recognition failed.';
+      toast.error(message);
+    } finally {
+      setIsTranscribing(false);
+      setTranscriptionStatus('');
+    }
   }
 
   /* ── Audio ── */
@@ -332,26 +317,11 @@ export default function VideoEditor() {
 
         {hasVideo ? (
           <>
-            {/* Small left column: AI tools */}
-            <div className="w-56 shrink-0 border-r border-[#3d2510] p-3 flex flex-col overflow-hidden">
-              <AIToolsPanel
-                bgBlurEnabled={state.bgBlurEnabled}
-                noiseRemoveApplied={state.noiseRemoveApplied}
-                hasVideo={hasVideo}
-                onBgBlurToggle={() => set({ bgBlurEnabled: !state.bgBlurEnabled })}
-                onNoiseRemove={handleNoiseRemove}
-                onSmartTrim={handleSmartTrim}
-              />
-            </div>
-
-            {/* Big center: video preview */}
-            <div className="flex-1 p-3 flex flex-col overflow-hidden min-w-0">
+            <div className="flex-1 p-2 flex flex-col overflow-hidden min-w-0">
               <VideoPreview
                 videoUrl={state.videoUrl!}
                 isPlaying={state.isPlaying}
                 currentTime={state.currentTime}
-                bgBlurEnabled={state.bgBlurEnabled}
-                noiseRemoveApplied={state.noiseRemoveApplied}
                 subtitles={state.subtitles}
                 format={state.format}
                 onPlayPause={handlePlayPause}
@@ -382,6 +352,12 @@ export default function VideoEditor() {
           onUpdateLayer={handleUpdateLayer}
           onDeleteLayer={handleDeleteLayer}
           onSelectLayer={handleSelectLayer}
+          hasVideo={hasVideo}
+          onAutoGenerate={handleAutoTranscribe}
+          isTranscribing={isTranscribing}
+          transcriptionStatus={transcriptionStatus}
+          whisperModel={whisperModel}
+          setWhisperModel={setWhisperModel}
         />
       </div>
 
@@ -391,16 +367,19 @@ export default function VideoEditor() {
         currentTime={state.currentTime}
         trimStart={state.trimStart}
         trimEnd={state.trimEnd || state.duration}
-        splitPoints={state.splitPoints}
         subtitles={state.subtitles}
+        layers={state.layers}
+        selectedLayerId={state.selectedLayerId}
         hasAudio={state.hasAudio}
         audioMuted={state.audioMuted}
         waveformData={waveformData}
         onSeek={handleSeek}
         onTrimChange={handleTrimChange}
-        onSplit={handleSplit}
         onAudioMuteToggle={handleAudioMuteToggle}
         onAudioRemove={handleAudioRemove}
+        onSelectLayer={handleSelectLayer}
+        onLayerTimingChange={handleLayerTimingChange}
+        onLayerZIndexChange={handleLayerZIndexChange}
       />
 
       {/* Preview modal */}
@@ -415,6 +394,9 @@ export default function VideoEditor() {
           layers={state.layers}
         />
       )}
+
+      {/* Toast notifications */}
+      <Toaster position="bottom-right" theme="dark" richColors />
     </div>
   );
 }

@@ -1,27 +1,48 @@
 'use client';
 
-import { useRef, useCallback, useState, useEffect } from 'react';
-import { Volume2, VolumeX, Trash2 } from 'lucide-react';
-import { SubtitleChunk, SplitPoint } from '@/types/editor';
+import { useRef, useCallback, useEffect } from 'react';
+import {
+  Volume2,
+  VolumeX,
+  Trash2,
+  Image as ImageIcon,
+  Film,
+  Type,
+  Music,
+  ArrowUp,
+  ArrowDown,
+} from 'lucide-react';
+import { Layer, SubtitleChunk } from '@/types/editor';
 
 interface TimelineProps {
   duration: number;
   currentTime: number;
   trimStart: number;
   trimEnd: number;
-  splitPoints: SplitPoint[];
   subtitles: SubtitleChunk[];
+  layers: Layer[];
+  selectedLayerId: string | null;
   hasAudio: boolean;
   audioMuted: boolean;
   waveformData: Float32Array | null;
   onSeek: (time: number) => void;
   onTrimChange: (start: number, end: number) => void;
-  onSplit: () => void;
   onAudioMuteToggle: () => void;
   onAudioRemove: () => void;
+  onSelectLayer: (id: string | null) => void;
+  onLayerTimingChange: (id: string, startTime: number, endTime: number) => void;
+  onLayerZIndexChange: (id: string, zIndex: number) => void;
 }
 
 type DragTarget = 'playhead' | 'trim-start' | 'trim-end' | null;
+type LayerDragMode = 'move' | 'start' | 'end';
+type LayerDragState = {
+  id: string;
+  mode: LayerDragMode;
+  startClientX: number;
+  originalStart: number;
+  originalEnd: number;
+};
 
 function formatTick(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -77,29 +98,37 @@ export default function Timeline({
   currentTime,
   trimStart,
   trimEnd,
-  splitPoints,
   subtitles,
+  layers,
+  selectedLayerId,
   hasAudio,
   audioMuted,
   waveformData,
   onSeek,
   onTrimChange,
-  onSplit,
   onAudioMuteToggle,
   onAudioRemove,
+  onSelectLayer,
+  onLayerTimingChange,
+  onLayerZIndexChange,
 }: TimelineProps) {
   const trackAreaRef = useRef<HTMLDivElement>(null);
   const audioCanvasRef = useRef<HTMLCanvasElement>(null);
   const dragging = useRef<DragTarget>(null);
+  const layerDragging = useRef<LayerDragState | null>(null);
 
   const dur = duration || 1;
+  const timelineWidth = Math.min(2400, Math.max(780, Math.round(dur * 28)));
 
   const timeToPercent = useCallback((t: number) => `${(t / dur) * 100}%`, [dur]);
 
   const getTimeFromX = useCallback((clientX: number): number => {
-    const rect = trackAreaRef.current?.getBoundingClientRect();
-    if (!rect) return 0;
-    return Math.max(0, Math.min(dur, ((clientX - rect.left) / rect.width) * dur));
+    const track = trackAreaRef.current;
+    if (!track) return 0;
+    const rect = track.getBoundingClientRect();
+    const scrollX = clientX - rect.left + track.scrollLeft;
+    const scrollWidth = Math.max(1, track.scrollWidth);
+    return Math.max(0, Math.min(dur, (scrollX / scrollWidth) * dur));
   }, [dur]);
 
   // Redraw audio canvas whenever waveform/time/muted changes
@@ -123,7 +152,49 @@ export default function Timeline({
     if (target === 'playhead') onSeek(getTimeFromX(e.clientX));
   }
 
+  function onLayerMouseDown(e: React.MouseEvent, layer: Layer, mode: LayerDragMode) {
+    e.preventDefault();
+    e.stopPropagation();
+    onSelectLayer(layer.id);
+    layerDragging.current = {
+      id: layer.id,
+      mode,
+      startClientX: e.clientX,
+      originalStart: layer.startTime,
+      originalEnd: layer.endTime,
+    };
+  }
+
+  function updateLayerDrag(e: React.MouseEvent) {
+    const drag = layerDragging.current;
+    const track = trackAreaRef.current;
+    if (!drag || !track) return;
+    const totalWidth = Math.max(1, track.scrollWidth);
+
+    const delta = ((e.clientX - drag.startClientX) / totalWidth) * dur;
+    const minLength = Math.min(0.5, Math.max(0.1, dur / 20));
+    let nextStart = drag.originalStart;
+    let nextEnd = drag.originalEnd;
+
+    if (drag.mode === 'move') {
+      const length = drag.originalEnd - drag.originalStart;
+      nextStart = Math.max(0, Math.min(dur - length, drag.originalStart + delta));
+      nextEnd = nextStart + length;
+    } else if (drag.mode === 'start') {
+      nextStart = Math.max(0, Math.min(drag.originalEnd - minLength, drag.originalStart + delta));
+    } else {
+      nextEnd = Math.min(dur, Math.max(drag.originalStart + minLength, drag.originalEnd + delta));
+    }
+
+    onLayerTimingChange(drag.id, nextStart, nextEnd);
+  }
+
   function onMouseMove(e: React.MouseEvent) {
+    if (layerDragging.current) {
+      updateLayerDrag(e);
+      return;
+    }
+
     if (!dragging.current) return;
     const t = getTimeFromX(e.clientX);
     if (dragging.current === 'playhead') onSeek(t);
@@ -135,6 +206,7 @@ export default function Timeline({
 
   function onMouseUp() {
     dragging.current = null;
+    layerDragging.current = null;
   }
 
   const ticks = Array.from({ length: 11 }, (_, i) => (dur / 10) * i);
@@ -149,14 +221,14 @@ export default function Timeline({
       {/* Track area */}
       <div
         ref={trackAreaRef}
-        className="relative select-none"
+        className="relative select-none overflow-x-auto scrollbar-thin"
         onMouseMove={onMouseMove}
         onMouseUp={onMouseUp}
         onMouseLeave={onMouseUp}
         onMouseDown={(e) => onMouseDown(e, 'playhead')}
       >
         {/* Time ruler */}
-        <div className="relative h-5 mb-1.5">
+        <div className="relative h-5 mb-1.5" style={{ minWidth: `${timelineWidth}px` }}>
           {ticks.map((tick) => (
             <span
               key={tick}
@@ -169,7 +241,7 @@ export default function Timeline({
         </div>
 
         {/* ── VIDEO track ── */}
-        <TrackRow label="Video">
+        <TrackRow label="Video" contentWidth={timelineWidth}>
           <div className="relative w-full h-full bg-[#1a0f04] rounded overflow-visible">
             {/* Full bar */}
             <div className="absolute inset-0 bg-[#8b8c20] rounded opacity-70" />
@@ -183,16 +255,6 @@ export default function Timeline({
               className="absolute inset-y-0 bg-[#0e0702] opacity-70 rounded-r z-10"
               style={{ left: timeToPercent(trimEnd), right: 0 }}
             />
-
-            {/* Split markers */}
-            {splitPoints.map((sp) => (
-              <div
-                key={sp.id}
-                className="absolute inset-y-0 w-0.5 bg-[#ff6b20] z-20"
-                style={{ left: timeToPercent(sp.time) }}
-                title={formatTick(sp.time)}
-              />
-            ))}
 
             {/* Trim handles */}
             {(trimStart > 0 || trimEnd < dur) && (
@@ -222,6 +284,7 @@ export default function Timeline({
         {/* ── AUDIO track ── */}
         <TrackRow
           label="Audio"
+          contentWidth={timelineWidth}
           controls={
             hasAudio ? (
               <div className="flex items-center gap-1">
@@ -267,7 +330,7 @@ export default function Timeline({
         </TrackRow>
 
         {/* ── SUBS track ── */}
-        <TrackRow label="Subs">
+        <TrackRow label="Subs" contentWidth={timelineWidth}>
           <div className="relative w-full h-full bg-[#1a0f04] rounded overflow-hidden">
             {subtitles.map((chunk) => {
               const left = `${(chunk.startTime / dur) * 100}%`;
@@ -287,6 +350,103 @@ export default function Timeline({
             <Playhead left={timeToPercent(currentTime)} />
           </div>
         </TrackRow>
+
+        {/* Layer clips */}
+        <div className="flex items-start gap-2 mt-2">
+          <span className="w-9 pt-2 text-[9px] text-[#4a3510] font-bold uppercase shrink-0 text-right">
+            Layers
+          </span>
+          <div
+            className="flex-1 max-h-[120px] overflow-auto pr-1 scrollbar-thin"
+            style={{ minWidth: `${timelineWidth}px` }}
+          >
+            {layers.length === 0 ? (
+              <div className="h-7 rounded bg-[#1a0f04] border border-dashed border-[#3d2510] flex items-center justify-center">
+                <span className="text-[#3d2510] text-[9px]">Add a layer to place it on the timeline</span>
+              </div>
+            ) : (
+              (() => {
+                const maxZ = layers.reduce((acc, item) => Math.max(acc, item.zIndex), 1);
+                return [...layers]
+                  .sort((a, b) => b.zIndex - a.zIndex)
+                  .map((layer) => {
+                    const left = `${(layer.startTime / dur) * 100}%`;
+                    const width = `${Math.max(0.5, ((layer.endTime - layer.startTime) / dur) * 100)}%`;
+                    const selected = selectedLayerId === layer.id;
+                    const Icon =
+                      layer.type === 'image'
+                        ? ImageIcon
+                        : layer.type === 'video'
+                          ? Film
+                          : layer.type === 'audio'
+                            ? Music
+                            : Type;
+
+                    return (
+                      <div key={layer.id} className="relative h-8 mb-1 rounded bg-[#1a0f04] overflow-hidden">
+                        <Playhead left={timeToPercent(currentTime)} />
+                        <div
+                          className={`absolute inset-y-1 rounded border cursor-grab active:cursor-grabbing transition-colors ${
+                            selected
+                              ? 'bg-[#c9b600] border-[#f0dd2a] text-[#1a0c05]'
+                              : 'bg-[#3b360d] border-[#7b7d20] text-[#e8d5a0] hover:border-[#c9b600]'
+                          }`}
+                          style={{ left, width: `max(28px, ${width})` }}
+                          title={`${layer.name} ${formatTick(layer.startTime)} - ${formatTick(layer.endTime)}`}
+                          onMouseDown={(e) => onLayerMouseDown(e, layer, 'move')}
+                        >
+                          <div
+                            className="absolute left-0 top-0 h-full w-2 cursor-ew-resize bg-black/20 hover:bg-black/35"
+                            onMouseDown={(e) => onLayerMouseDown(e, layer, 'start')}
+                          />
+                          <div className="flex h-full items-center gap-1.5 px-2 min-w-0">
+                            <Icon size={11} className="shrink-0" />
+                            <span className="text-[10px] font-semibold truncate">{layer.name}</span>
+                          </div>
+                          <div
+                            className="absolute right-0 top-0 h-full w-2 cursor-ew-resize bg-black/20 hover:bg-black/35"
+                            onMouseDown={(e) => onLayerMouseDown(e, layer, 'end')}
+                          />
+                        </div>
+
+                        <div className="absolute right-6 top-0.5 h-full flex items-center gap-1 px-1">
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onLayerZIndexChange(layer.id, Math.min(maxZ + 1, layer.zIndex + 1));
+                          }}
+                            className="w-4 h-4 rounded bg-[#2d1a08] border border-[#7b7d20] text-[#9a8060] hover:text-[#c9b600] hover:border-[#c9b600] flex items-center justify-center"
+                          >
+                            <ArrowUp size={9} />
+                          </button>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                          }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onLayerZIndexChange(layer.id, Math.max(1, layer.zIndex - 1));
+                          }}
+                            className="w-4 h-4 rounded bg-[#2d1a08] border border-[#7b7d20] text-[#9a8060] hover:text-[#c9b600] hover:border-[#c9b600] flex items-center justify-center"
+                          >
+                            <ArrowDown size={9} />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  });
+              })()
+            )}
+          </div>
+          <div className="w-[52px] shrink-0" />
+        </div>
       </div>
     </div>
   );
@@ -298,17 +458,21 @@ function TrackRow({
   label,
   children,
   controls,
+  contentWidth,
 }: {
   label: string;
   children: React.ReactNode;
   controls?: React.ReactNode;
+  contentWidth?: number;
 }) {
   return (
     <div className="flex items-center gap-2 mb-1.5">
       <span className="w-9 text-[9px] text-[#4a3510] font-bold uppercase shrink-0 text-right">
         {label}
       </span>
-      <div className="flex-1 h-7 relative">{children}</div>
+      <div className="flex-1 h-7 relative" style={{ minWidth: `${contentWidth || 0}px` }}>
+        {children}
+      </div>
       {controls && <div className="shrink-0">{controls}</div>}
       {!controls && <div className="w-[52px] shrink-0" />}
     </div>

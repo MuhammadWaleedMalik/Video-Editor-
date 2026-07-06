@@ -1,15 +1,15 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useEffect, useRef, useCallback, useState } from 'react';
-import { Play, Pause, SkipBack, Image as ImageIcon, Film as FilmIcon, Type as TypeIcon } from 'lucide-react';
-import { SubtitleChunk, VideoFormat, Layer } from '@/types/editor';
+import { Play, Pause, SkipBack, Image as ImageIcon, Film as FilmIcon } from 'lucide-react';
+import { SubtitleChunk, VideoFormat, Layer, LayerType } from '@/types/editor';
 
 interface VideoPreviewProps {
   videoUrl: string;
   isPlaying: boolean;
   currentTime: number;
-  bgBlurEnabled: boolean;
-  noiseRemoveApplied: boolean;
   subtitles: SubtitleChunk[];
   format: VideoFormat;
   onPlayPause: () => void;
@@ -22,7 +22,7 @@ interface VideoPreviewProps {
   selectedLayerId: string | null;
   onSelectLayer: (id: string | null) => void;
   onUpdateLayer: (layer: Layer) => void;
-  onAddLayerAtCoords: (type: 'image' | 'video' | 'text', x: number, y: number) => void;
+  onAddLayerAtCoords: (type: Exclude<LayerType, 'audio'>, x: number, y: number) => void;
 }
 
 const FORMAT_RATIO: Record<VideoFormat, number> = {
@@ -67,12 +67,27 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
-/** Draw video frame onto canvas with format cropping */
+function getStageSize(video: HTMLVideoElement, format: VideoFormat) {
+  const vw = video.videoWidth || 1280;
+  const vh = video.videoHeight || 720;
+  const targetRatio = FORMAT_RATIO[format];
+  const videoRatio = vw / vh;
+
+  if (targetRatio === videoRatio) {
+    return { width: vw, height: vh };
+  }
+
+  if (targetRatio < videoRatio) {
+    return { width: vw, height: Math.round(vw / targetRatio) };
+  }
+
+  return { width: Math.round(vh * targetRatio), height: vh };
+}
+
+/** Draw video centered on an expanded format canvas. */
 function drawVideoFrame(
   ctx: CanvasRenderingContext2D,
-  video: HTMLVideoElement,
-  format: VideoFormat,
-  bgBlur: boolean
+  video: HTMLVideoElement
 ) {
   const cw = ctx.canvas.width;
   const ch = ctx.canvas.height;
@@ -82,38 +97,20 @@ function drawVideoFrame(
   ctx.fillStyle = '#000';
   ctx.fillRect(0, 0, cw, ch);
 
-  if (bgBlur) {
-    ctx.save();
-    ctx.filter = 'blur(22px)';
-    ctx.drawImage(video, -24, -24, cw + 48, ch + 48);
-    ctx.restore();
-  }
-
-  // Determine source crop based on format
-  let sx = 0, sy = 0, sw = vw, sh = vh;
-  const targetRatio = FORMAT_RATIO[format];
   const videoRatio = vw / vh;
+  const canvasRatio = cw / ch;
+  let dw = cw;
+  let dh = ch;
 
-  if (Math.abs(videoRatio - targetRatio) > 0.01) {
-    if (videoRatio > targetRatio) {
-      // Video wider → crop sides
-      sw = Math.round(vh * targetRatio);
-      sx = Math.round((vw - sw) / 2);
-    } else {
-      // Video taller → crop top/bottom
-      sh = Math.round(vw / targetRatio);
-      sy = Math.round((vh - sh) / 2);
-    }
-  }
-
-  if (bgBlur) {
-    // In blur mode draw a centered portrait strip
-    const pw = cw * 0.56;
-    const ph = ch;
-    ctx.drawImage(video, sx, sy, sw, sh, (cw - pw) / 2, (ch - ph) / 2, pw, ph);
+  if (canvasRatio > videoRatio) {
+    dh = ch;
+    dw = dh * videoRatio;
   } else {
-    ctx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
+    dw = cw;
+    dh = dw / videoRatio;
   }
+
+  ctx.drawImage(video, (cw - dw) / 2, (ch - dh) / 2, dw, dh);
 }
 
 /** Draw subtitle text overlay */
@@ -143,36 +140,10 @@ function drawSubtitleOverlay(ctx: CanvasRenderingContext2D, text: string) {
   ctx.restore();
 }
 
-/** Draw "NR" badge when noise remove is applied */
-function drawNRBadge(ctx: CanvasRenderingContext2D) {
-  const cw = ctx.canvas.width;
-  const fs = Math.round(cw * 0.024);
-  const pad = fs * 0.5;
-  const label = 'NR';
-  ctx.font = `bold ${fs}px Inter, Arial, sans-serif`;
-  const tw = ctx.measureText(label).width;
-  const bw = tw + pad * 2;
-  const bh = fs + pad * 1.2;
-  const bx = cw - bw - Math.round(cw * 0.015);
-  const by = Math.round(ctx.canvas.height * 0.015);
-
-  ctx.save();
-  ctx.fillStyle = '#22c55e';
-  roundRect(ctx, bx, by, bw, bh, bh / 2);
-  ctx.fill();
-  ctx.fillStyle = '#fff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(label, bx + bw / 2, by + bh / 2);
-  ctx.restore();
-}
-
 export default function VideoPreview({
   videoUrl,
   isPlaying,
   currentTime,
-  bgBlurEnabled,
-  noiseRemoveApplied,
   subtitles,
   format,
   onPlayPause,
@@ -200,24 +171,19 @@ export default function VideoPreview({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    // Set canvas resolution based on format
-    const ratio = FORMAT_RATIO[format];
-    const baseH = video.videoHeight || 720;
-    const baseW = Math.round(baseH * ratio);
-    if (canvas.width !== baseW || canvas.height !== baseH) {
-      canvas.width = baseW;
-      canvas.height = baseH;
+    const stage = getStageSize(video, format);
+    if (canvas.width !== stage.width || canvas.height !== stage.height) {
+      canvas.width = stage.width;
+      canvas.height = stage.height;
     }
 
-    drawVideoFrame(ctx, video, format, bgBlurEnabled);
+    drawVideoFrame(ctx, video);
 
     const sub = getActiveSub(subsRef.current, video.currentTime);
     if (sub) drawSubtitleOverlay(ctx, sub.text);
 
-    if (noiseRemoveApplied) drawNRBadge(ctx);
-
     if (isPlaying) animRef.current = requestAnimationFrame(drawFrame);
-  }, [videoRef, format, bgBlurEnabled, noiseRemoveApplied, isPlaying]);
+  }, [videoRef, format, isPlaying]);
 
   useEffect(() => {
     if (isPlaying) {
@@ -232,14 +198,14 @@ export default function VideoPreview({
   // Redraw on subtitle/format changes while paused
   useEffect(() => {
     if (!isPlaying) setTimeout(() => drawFrame(), 30);
-  }, [subtitles, format, bgBlurEnabled, noiseRemoveApplied, isPlaying, drawFrame]);
+  }, [subtitles, format, isPlaying, drawFrame]);
 
   // Drag & drop layer creation
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
-    const type = e.dataTransfer.getData('layerType') as 'image' | 'video' | 'text';
+    const type = e.dataTransfer.getData('layerType') as Exclude<LayerType, 'audio'>;
     if (type) {
       const x = ((e.clientX - rect.left) / rect.width) * 100;
       const y = ((e.clientY - rect.top) / rect.height) * 100;
@@ -341,35 +307,28 @@ export default function VideoPreview({
 
   return (
     <div className="flex flex-col h-full gap-2 min-h-0">
-      {/* Badges row */}
+      {/* Format row */}
       <div className="flex items-center gap-2 h-5 shrink-0">
-        {bgBlurEnabled && (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#c9b600] text-[#1a0c05]">
-            BG Blur ON
-          </span>
-        )}
-        {noiseRemoveApplied && (
-          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-green-600 text-white">
-            Noise Removed
-          </span>
-        )}
         <span className="ml-auto text-[10px] text-[#5a4530] font-mono">{format}</span>
       </div>
 
-      {/* Canvas — aspect ratio constrained */}
+      {/* Canvas stage */}
       <div className="flex-1 flex items-center justify-center overflow-hidden min-h-0">
         <div
           ref={containerRef}
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDrop}
           onClick={handleContainerClick}
-          className="relative bg-black rounded-xl overflow-hidden max-h-full max-w-full group"
-          style={{ aspectRatio: FORMAT_RATIO[format], height: '100%' }}
+          className="relative bg-black rounded-xl overflow-hidden max-h-full max-w-full group shadow-[0_18px_80px_rgba(0,0,0,0.45)] w-full"
+          style={{ aspectRatio: FORMAT_RATIO[format], maxWidth: '100%', maxHeight: '100%' }}
         >
           <canvas ref={canvasRef} className="w-full h-full block object-contain pointer-events-none" />
 
           {/* Interactive Canvas Layers */}
-          {layers.map((layer) => {
+          {layers
+            .filter((layer) => layer.type !== 'audio')
+            .filter((layer) => currentTime >= layer.startTime && currentTime <= layer.endTime)
+            .map((layer) => {
             const isSelected = selectedLayerId === layer.id;
             const isEditing = editingTextId === layer.id;
 

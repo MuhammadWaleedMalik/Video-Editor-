@@ -1,7 +1,7 @@
 'use client';
 
 import { useRef } from 'react';
-import { Upload, Download, Wand2, Edit3, Trash2, ArrowLeft, Sliders, Paintbrush, Image as ImageIcon, Film as FilmIcon, Type as TypeIcon } from 'lucide-react';
+import { Upload, Wand2, Edit3, Trash2, ArrowLeft, Sliders, Paintbrush, Image as ImageIcon, Film as FilmIcon, Type as TypeIcon, Music } from 'lucide-react';
 import { SubtitleChunk, Layer } from '@/types/editor';
 import { parseSubtitleFile, formatTimestamp } from '@/lib/subtitle-parser';
 
@@ -18,6 +18,14 @@ interface SubtitlesPanelProps {
   onUpdateLayer: (layer: Layer) => void;
   onDeleteLayer: (id: string) => void;
   onSelectLayer: (id: string | null) => void;
+
+  // Transcription props
+  hasVideo?: boolean;
+  onAutoGenerate?: () => void;
+  isTranscribing?: boolean;
+  transcriptionStatus?: string;
+  whisperModel?: 'Xenova/whisper-tiny' | 'Xenova/whisper-small';
+  setWhisperModel?: (model: 'Xenova/whisper-tiny' | 'Xenova/whisper-small') => void;
 }
 
 export default function SubtitlesPanel({
@@ -31,6 +39,12 @@ export default function SubtitlesPanel({
   onUpdateLayer,
   onDeleteLayer,
   onSelectLayer,
+  hasVideo,
+  onAutoGenerate,
+  isTranscribing,
+  transcriptionStatus,
+  whisperModel,
+  setWhisperModel,
 }: SubtitlesPanelProps) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -108,6 +122,7 @@ export default function SubtitlesPanel({
             {selectedLayer.type === 'text' && <TypeIcon size={14} className="text-[#c9b600]" />}
             {selectedLayer.type === 'image' && <ImageIcon size={14} className="text-[#c9b600]" />}
             {selectedLayer.type === 'video' && <FilmIcon size={14} className="text-[#c9b600]" />}
+            {selectedLayer.type === 'audio' && <Music size={14} className="text-[#c9b600]" />}
             Layer Editor
           </span>
         </div>
@@ -195,6 +210,45 @@ export default function SubtitlesPanel({
                 onChange={(e) => onUpdateLayer({ ...selectedLayer, zIndex: Math.max(1, Number(e.target.value)) })}
                 className="bg-[#1f1005] border border-[#3d2510] rounded-lg px-2 py-1 text-xs text-[#e8d5a0] outline-none focus:border-[#c9b600] w-full"
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] text-[#5a4530]">Show From (s)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max={duration || undefined}
+                  step="0.1"
+                  value={Number(selectedLayer.startTime.toFixed(1))}
+                  onChange={(e) => {
+                    const next = Math.max(0, Number(e.target.value));
+                    onUpdateLayer({
+                      ...selectedLayer,
+                      startTime: Math.min(next, selectedLayer.endTime - 0.1),
+                    });
+                  }}
+                  className="bg-[#1f1005] border border-[#3d2510] rounded-lg px-2 py-1 text-xs text-[#e8d5a0] outline-none"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-[9px] text-[#5a4530]">Show Until (s)</label>
+                <input
+                  type="number"
+                  min="0"
+                  max={duration || undefined}
+                  step="0.1"
+                  value={Number(selectedLayer.endTime.toFixed(1))}
+                  onChange={(e) => {
+                    const next = duration ? Math.min(duration, Number(e.target.value)) : Number(e.target.value);
+                    onUpdateLayer({
+                      ...selectedLayer,
+                      endTime: Math.max(next, selectedLayer.startTime + 0.1),
+                    });
+                  }}
+                  className="bg-[#1f1005] border border-[#3d2510] rounded-lg px-2 py-1 text-xs text-[#e8d5a0] outline-none"
+                />
+              </div>
             </div>
           </div>
 
@@ -290,7 +344,7 @@ export default function SubtitlesPanel({
           )}
 
           {/* Media source uploads (Only for Image/Video layer) */}
-          {(selectedLayer.type === 'image' || selectedLayer.type === 'video') && (
+          {(selectedLayer.type === 'image' || selectedLayer.type === 'video' || selectedLayer.type === 'audio') && (
             <div className="flex flex-col gap-3">
               <div className="flex items-center gap-1.5 text-[10px] text-[#7a6040] uppercase font-bold tracking-wider border-b border-[#3d2510]/50 pb-1">
                 <Upload size={11} />
@@ -307,12 +361,14 @@ export default function SubtitlesPanel({
                   className="w-full flex items-center justify-center gap-2 bg-[#2d1a08] border border-[#4a3010] hover:border-[#c9b600] text-[#c8b88a] text-xs font-semibold py-2.5 rounded-lg transition-colors"
                 >
                   <Upload size={12} className="text-[#c9b600]" />
-                  <span>Choose {selectedLayer.type === 'image' ? 'Image' : 'Video'} File</span>
+                  <span>
+                    Choose {selectedLayer.type === 'audio' ? 'Audio' : selectedLayer.type === 'image' ? 'Image' : 'Video'} File
+                  </span>
                 </button>
                 <input
                   id={`layer-file-upload-${selectedLayer.id}`}
                   type="file"
-                  accept={selectedLayer.type === 'image' ? 'image/*' : 'video/*'}
+                  accept={selectedLayer.type === 'audio' ? 'audio/*' : selectedLayer.type === 'image' ? 'image/*' : 'video/*'}
                   className="hidden"
                   onChange={handleFileChange}
                 />
@@ -360,9 +416,18 @@ export default function SubtitlesPanel({
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#3d2510]">
         <h2 className="text-[#e8d5a0] text-sm font-bold">Subtitles</h2>
         <div className="flex items-center gap-2">
-          <button className="flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded bg-[#2d1a08] text-[#c9b600] border border-[#c9b600] hover:bg-[#3d2510] transition-colors">
-            <Wand2 size={10} />
-            Auto-gen
+          <button
+            className={`flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded border transition-colors ${
+              isTranscribing
+                ? 'bg-[#3d2510] text-[#7a6040] border-[#3d2510] cursor-wait'
+                : 'bg-[#2d1a08] text-[#c9b600] border-[#c9b600] hover:bg-[#3d2510]'
+            }`}
+            onClick={onAutoGenerate}
+            disabled={isTranscribing || !hasVideo}
+            title={!hasVideo ? 'Upload a video first' : isTranscribing ? 'Transcribing...' : 'Auto-generate subtitles with Whisper AI'}
+          >
+            <Wand2 size={10} className={isTranscribing ? 'animate-spin' : ''} />
+            {isTranscribing ? 'Working...' : 'Auto-gen'}
           </button>
           <button className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#2d1a08] text-[#c8b88a] border border-[#3d2510] hover:border-[#7a6040] transition-colors">
             <Edit3 size={10} />
@@ -370,22 +435,47 @@ export default function SubtitlesPanel({
         </div>
       </div>
 
-      {/* Engine / Lang */}
-      <div className="flex items-center gap-3 px-4 py-2 border-b border-[#3d2510]">
+      {/* Engine / Lang / Model selector */}
+      <div className="flex items-center gap-3 px-4 py-2 border-b border-[#3d2510] flex-wrap">
         <span className="text-[#7a6040] text-[10px]">Engine:</span>
         <span className="text-[9px] font-bold px-2 py-0.5 rounded-full border border-[#c9b600] text-[#c9b600]">Whisper</span>
-        <span className="text-[#7a6040] text-[10px] ml-1">Lang:</span>
-        <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-[#c9b600] text-[#1a0c05]">EN</span>
+        <span className="text-[#7a6040] text-[10px] ml-1">Model:</span>
+        <select
+          value={whisperModel || 'Xenova/whisper-tiny'}
+          onChange={(e) => setWhisperModel?.(e.target.value as any)}
+          disabled={isTranscribing}
+          className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-[#1f1005] border border-[#3d2510] text-[#c9b600] outline-none focus:border-[#c9b600] cursor-pointer disabled:opacity-50"
+        >
+          <option value="Xenova/whisper-tiny">Tiny (fast)</option>
+          <option value="Xenova/whisper-small">Small (accurate)</option>
+        </select>
       </div>
+
+      {/* Transcription status banner */}
+      {isTranscribing && transcriptionStatus && (
+        <div className="px-4 py-2 border-b border-[#3d2510] bg-[#1f1005]">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-[#c9b600] animate-pulse shrink-0" />
+            <p className="text-[10px] text-[#c9b600] font-medium truncate">{transcriptionStatus}</p>
+          </div>
+        </div>
+      )}
 
       {/* Auto-generate / Upload button */}
       <div className="px-4 py-2 border-b border-[#3d2510] flex flex-col gap-2">
         <button
-          className="w-full flex items-center justify-center gap-2 bg-[#2d1a08] border border-[#4a3010] hover:border-[#c9b600] text-[#c8b88a] text-xs font-semibold py-2 rounded-lg transition-colors"
-          onClick={() => {}}
+          className={`w-full flex items-center justify-center gap-2 border text-xs font-semibold py-2 rounded-lg transition-colors ${
+            isTranscribing
+              ? 'bg-[#3d2510] border-[#4a3010] text-[#7a6040] cursor-wait'
+              : !hasVideo
+                ? 'bg-[#1f1005] border-[#3d2510] text-[#5a4530] cursor-not-allowed'
+                : 'bg-[#2d1a08] border-[#4a3010] hover:border-[#c9b600] text-[#c8b88a]'
+          }`}
+          onClick={onAutoGenerate}
+          disabled={isTranscribing || !hasVideo}
         >
-          <Wand2 size={12} className="text-[#c9b600]" />
-          Auto-Generate
+          <Wand2 size={12} className={`text-[#c9b600] ${isTranscribing ? 'animate-spin' : ''}`} />
+          {isTranscribing ? 'Generating Subtitles...' : 'Auto-Generate'}
         </button>
         <button
           className="w-full flex items-center justify-center gap-2 bg-[#1f1005] border border-[#3d2510] hover:border-[#7a6040] text-[#7a6040] hover:text-[#c8b88a] text-xs py-2 rounded-lg transition-colors"

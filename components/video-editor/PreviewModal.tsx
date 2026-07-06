@@ -1,5 +1,7 @@
 'use client';
 
+/* eslint-disable @next/next/no-img-element */
+
 import { useEffect, useRef, useState } from 'react';
 import { X, Play, Pause, Volume2, VolumeX, Maximize2 } from 'lucide-react';
 import { VideoFormat, SubtitleChunk, Layer } from '@/types/editor';
@@ -137,7 +139,7 @@ export default function PreviewModal({
           <video
             ref={videoRef}
             src={videoUrl}
-            className="w-full h-full object-cover"
+            className="w-full h-full object-contain bg-black"
             muted={muted}
             onTimeUpdate={onTimeUpdate}
             onEnded={() => setPlaying(false)}
@@ -145,7 +147,10 @@ export default function PreviewModal({
           />
 
           {/* Canvas Layers Overlay */}
-          {layers && layers.map((layer) => (
+          {layers && layers
+            .filter((layer) => layer.type !== 'audio')
+            .filter((layer) => currentTime >= layer.startTime && currentTime <= layer.endTime)
+            .map((layer) => (
             <div
               key={layer.id}
               className="absolute pointer-events-none select-none"

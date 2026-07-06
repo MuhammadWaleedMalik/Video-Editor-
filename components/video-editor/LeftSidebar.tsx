@@ -1,23 +1,22 @@
 'use client';
 
-import { Settings, Music, User, Zap, Camera, Image, Film, Type, Trash2, Plus, Layers } from 'lucide-react';
-import { Layer } from '@/types/editor';
-
-const tools = [
-  { icon: Camera, label: 'Camera' },
-  { icon: Settings, label: 'Settings' },
-  { icon: Music, label: 'Audio' },
-  { icon: User, label: 'Profile' },
-  { icon: Zap, label: 'Effects' },
-];
+import { Music, Image as ImageIcon, Film, Type, Trash2, Plus, Layers, type LucideIcon } from 'lucide-react';
+import { Layer, LayerType } from '@/types/editor';
 
 interface LeftSidebarProps {
   layers: Layer[];
   selectedLayerId: string | null;
   onSelectLayer: (id: string | null) => void;
-  onAddLayer: (type: 'image' | 'video' | 'text') => void;
+  onAddLayer: (type: LayerType) => void;
   onDeleteLayer: (id: string) => void;
 }
+
+const layerCreators: Array<{ type: LayerType; icon: LucideIcon; label: string }> = [
+  { type: 'image', icon: ImageIcon, label: 'Image Layer' },
+  { type: 'video', icon: Film, label: 'Video Layer' },
+  { type: 'text', icon: Type, label: 'Text Layer' },
+  { type: 'audio', icon: Music, label: 'Audio Layer' },
+];
 
 export default function LeftSidebar({
   layers,
@@ -27,26 +26,12 @@ export default function LeftSidebar({
   onDeleteLayer,
 }: LeftSidebarProps) {
 
-  const handleDragStart = (e: React.DragEvent, type: 'image' | 'video' | 'text') => {
+  const handleDragStart = (e: React.DragEvent, type: Exclude<LayerType, 'audio'>) => {
     e.dataTransfer.setData('layerType', type);
   };
 
   return (
     <div className="flex h-full shrink-0">
-      {/* Original Icon Sidebar Column */}
-      <aside className="w-12 bg-[#120a02] border-r border-[#3d2510] flex flex-col items-center py-3 gap-1 shrink-0">
-        {tools.map(({ icon: Icon, label }) => (
-          <button
-            key={label}
-            title={label}
-            className="w-9 h-9 flex items-center justify-center rounded-lg text-[#5a4530] hover:text-[#c9b600] hover:bg-[#2d1a08] transition-colors"
-          >
-            <Icon size={18} />
-          </button>
-        ))}
-      </aside>
-
-      {/* Layers & Creator Sidebar Column */}
       <aside className="w-60 bg-[#160d05] border-r border-[#3d2510] flex flex-col overflow-hidden shrink-0">
         {/* Header */}
         <div className="p-3 border-b border-[#3d2510] flex items-center gap-2">
@@ -58,56 +43,27 @@ export default function LeftSidebar({
         <div className="p-3 border-b border-[#3d2510] flex flex-col gap-2">
           <p className="text-[10px] text-[#7a6040] font-semibold uppercase tracking-wider">Add Elements</p>
           <div className="grid grid-cols-1 gap-2">
-            {/* Add Image */}
-            <div
-              draggable
-              onDragStart={(e) => handleDragStart(e, 'image')}
-              onClick={() => onAddLayer('image')}
-              className="flex items-center justify-between p-2 rounded-lg bg-[#241508] border border-[#3d2510] hover:border-[#c9b600] hover:bg-[#2d1a08] cursor-grab active:cursor-grabbing text-xs text-[#c8b88a] font-medium transition-all group"
-              title="Drag onto Canvas or click to add"
-            >
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded bg-[#3d2510] flex items-center justify-center text-[#c9b600] group-hover:bg-[#c9b600] group-hover:text-[#1a0c05] transition-colors">
-                  <Image size={12} />
+            {layerCreators.map(({ type, icon: Icon, label }) => (
+              <div
+                key={type}
+                draggable={type !== 'audio'}
+                onDragStart={(e) => {
+                  if (type === 'audio') return;
+                  handleDragStart(e, type);
+                }}
+                onClick={() => onAddLayer(type)}
+                className="flex items-center justify-between p-2 rounded-lg bg-[#241508] border border-[#3d2510] hover:border-[#c9b600] hover:bg-[#2d1a08] cursor-grab active:cursor-grabbing text-xs text-[#c8b88a] font-medium transition-all group"
+                title="Drag onto Canvas or click to add"
+              >
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded bg-[#3d2510] flex items-center justify-center text-[#c9b600] group-hover:bg-[#c9b600] group-hover:text-[#1a0c05] transition-colors">
+                    <Icon size={12} />
+                  </div>
+                  <span>{label}</span>
                 </div>
-                <span>Image Layer</span>
+                <Plus size={12} className="text-[#5a4530] group-hover:text-[#c9b600] transition-colors" />
               </div>
-              <Plus size={12} className="text-[#5a4530] group-hover:text-[#c9b600] transition-colors" />
-            </div>
-
-            {/* Add Video */}
-            <div
-              draggable
-              onDragStart={(e) => handleDragStart(e, 'video')}
-              onClick={() => onAddLayer('video')}
-              className="flex items-center justify-between p-2 rounded-lg bg-[#241508] border border-[#3d2510] hover:border-[#c9b600] hover:bg-[#2d1a08] cursor-grab active:cursor-grabbing text-xs text-[#c8b88a] font-medium transition-all group"
-              title="Drag onto Canvas or click to add"
-            >
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded bg-[#3d2510] flex items-center justify-center text-[#c9b600] group-hover:bg-[#c9b600] group-hover:text-[#1a0c05] transition-colors">
-                  <Film size={12} />
-                </div>
-                <span>Video Layer</span>
-              </div>
-              <Plus size={12} className="text-[#5a4530] group-hover:text-[#c9b600] transition-colors" />
-            </div>
-
-            {/* Add Text */}
-            <div
-              draggable
-              onDragStart={(e) => handleDragStart(e, 'text')}
-              onClick={() => onAddLayer('text')}
-              className="flex items-center justify-between p-2 rounded-lg bg-[#241508] border border-[#3d2510] hover:border-[#c9b600] hover:bg-[#2d1a08] cursor-grab active:cursor-grabbing text-xs text-[#c8b88a] font-medium transition-all group"
-              title="Drag onto Canvas or click to add"
-            >
-              <div className="flex items-center gap-2">
-                <div className="w-6 h-6 rounded bg-[#3d2510] flex items-center justify-center text-[#c9b600] group-hover:bg-[#c9b600] group-hover:text-[#1a0c05] transition-colors">
-                  <Type size={12} />
-                </div>
-                <span>Text Layer</span>
-              </div>
-              <Plus size={12} className="text-[#5a4530] group-hover:text-[#c9b600] transition-colors" />
-            </div>
+            ))}
           </div>
           <p className="text-[9px] text-[#5a4530] italic text-center mt-1">
             Tip: Drag and drop items onto the video preview canvas directly!
@@ -130,8 +86,9 @@ export default function LeftSidebar({
                 .map((layer) => {
                   const isSelected = selectedLayerId === layer.id;
                   let Icon = Type;
-                  if (layer.type === 'image') Icon = Image;
+                  if (layer.type === 'image') Icon = ImageIcon;
                   if (layer.type === 'video') Icon = Film;
+                  if (layer.type === 'audio') Icon = Music;
 
                   return (
                     <div

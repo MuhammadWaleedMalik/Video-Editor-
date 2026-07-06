@@ -7,28 +7,19 @@ export interface SubtitleChunk {
   text: string;
 }
 
-export interface SplitPoint {
-  id: string;
-  time: number;
-  type: 'manual' | 'smart';
-}
-
-export interface SmartTrimSegment {
-  id: string;
-  startTime: number;
-  endTime: number;
-  keep: boolean; // false = detected silence/filler
-}
+export type LayerType = 'image' | 'video' | 'text' | 'audio';
 
 export interface Layer {
   id: string;
-  type: 'image' | 'video' | 'text';
+  type: LayerType;
   x: number;          // percent (0-100)
   y: number;          // percent (0-100)
   width: number;      // percent (0-100)
   height: number;     // percent (0-100)
   zIndex: number;
   name: string;
+  startTime: number;
+  endTime: number;
   text?: string;
   fontSize?: number;  // px
   color?: string;     // color hex
@@ -44,15 +35,10 @@ export interface EditorState {
   isPlaying: boolean;
   trimStart: number;
   trimEnd: number;
-  splitPoints: SplitPoint[];
   subtitles: SubtitleChunk[];
   hasAudio: boolean;
   audioMuted: boolean;
-  bgBlurEnabled: boolean;
-  activePanel: 'ai' | 'teleprompter';
   format: VideoFormat;
-  noiseRemoveApplied: boolean;
-  smartTrimSegments: SmartTrimSegment[];
   layers: Layer[];
   selectedLayerId: string | null;
 }
