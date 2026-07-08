@@ -25,14 +25,14 @@ const TimelineTickStrip = memo(function TimelineTickStrip({
 
   return (
     <div
-      className="relative h-9 overflow-hidden rounded-md border border-[#4d3910] bg-[#100a04] shadow-[inset_0_1px_0_rgba(242,212,11,0.16)]"
+      className="relative h-9 overflow-hidden rounded-lg bg-[#0f0904] shadow-[inset_0_-1px_0_rgba(242,212,11,0.16)]"
       style={{ minWidth: `${timelineWidth}px` }}
     >
-      <div className="absolute left-0 right-0 top-[18px] h-px bg-[#c9b600]/55" />
+      <div className="absolute left-0 right-0 top-[18px] h-px bg-[#c9b600]/45" />
       {minorTicks.map((tick) => (
         <div
           key={`minor-${tick}`}
-          className="absolute top-[18px] h-2 border-l border-[#c9b600]/25"
+          className="absolute top-[18px] h-2 border-l border-[#c9b600]/18"
           style={{ left: timeToPercent(tick) }}
         />
       ))}
@@ -47,11 +47,11 @@ const TimelineTickStrip = memo(function TimelineTickStrip({
         return (
           <div
             key={`major-${tick}`}
-            className="absolute top-0 h-8 border-l border-[#f2d40b]"
+            className="absolute top-0 h-8 border-l border-[#f2d40b]/70"
             style={{ left: timeToPercent(tick) }}
           >
             <span
-              className="absolute left-0 top-1 whitespace-nowrap rounded bg-[#201306] px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-[#fff0a6] ring-1 ring-[#5d4612]"
+              className="absolute left-0 top-1 whitespace-nowrap rounded-sm bg-[#090502]/75 px-1.5 py-0.5 font-mono text-[10px] font-bold leading-none text-[#fff0a6] shadow-[0_1px_4px_rgba(0,0,0,0.55)]"
               style={{ transform }}
             >
               {formatTick(tick)}

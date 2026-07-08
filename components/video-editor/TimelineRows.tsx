@@ -1,9 +1,9 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { memo, useEffect, useMemo, useState } from 'react';
-import { AudioLines, GripVertical, Trash2, Volume2, VolumeX } from 'lucide-react';
+import { AudioLines, GripVertical, Scissors, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { CanvasObject, Layer, MediaAsset, TimelineClip } from '@/types/editor';
-import { getTimelineStackItems } from './timelineModel';
+import { getTimelineStackItems, MIN_CLIP_DURATION } from './timelineModel';
 import { formatTick, getTimelineMinorTickStep, getTimelineTickStep, getTimelineTicks } from './timelineUtils';
 import TrackRow from './TrackRow';
 import Playhead from './Playhead';
@@ -22,6 +22,7 @@ interface TimelineRowsProps {
   timelineLaneRef: React.RefObject<HTMLDivElement>;
   timeToPercent: (time: number) => string;
   onPlayheadPointerDown: (e: React.PointerEvent) => void;
+  onTimelinePointerDown: (e: React.PointerEvent) => void;
   onLayerPointerDown: (
     e: React.PointerEvent,
     layer: Layer,
@@ -34,10 +35,17 @@ interface TimelineRowsProps {
   ) => void;
   onSelectClip: (id: string | null) => void;
   onSelectLayer: (id: string | null) => void;
+  onSplitClip: (id: string) => void;
   onToggleClipMute: (id: string) => void;
   onDeleteClip: (id: string) => void;
   onDeleteLayer: (id: string) => void;
-  stackDragPreview: { kind: 'clip' | 'layer'; id: string; targetIndex: number } | null;
+  stackDragPreview: {
+    kind: 'clip' | 'layer';
+    id: string;
+    targetIndex: number;
+    clientX: number;
+    clientY: number;
+  } | null;
 }
 
 interface ClipPreviewProps {
@@ -50,8 +58,16 @@ const TIMELINE_FRAME_WIDTH = 120;
 const TIMELINE_FRAME_HEIGHT = 68;
 const TIMELINE_FRAME_BUILD_DELAY_MS = 120;
 const MAX_TIMELINE_FRAME_CACHE_SIZE = 64;
+const TIMELINE_LABEL_MIN_WIDTH = 72;
+const READABLE_TICK_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 20, 30, 60, 120, 180, 300, 600];
 const timelineFrameCache = new Map<string, string[]>();
 const timelineFrameRequests = new Map<string, Promise<string[]>>();
+
+function getReadableTimelineTickStep(duration: number, timelineWidth: number) {
+  const maxLabels = Math.max(2, Math.floor(timelineWidth / TIMELINE_LABEL_MIN_WIDTH));
+  const rawStep = Math.max(0.1, duration / maxLabels);
+  return READABLE_TICK_STEPS.find((step) => step >= rawStep) ?? getTimelineTickStep(duration);
+}
 
 function getFrameCacheKey(asset: MediaAsset, clip: TimelineClip, frameCount: number) {
   return [
@@ -231,7 +247,7 @@ const TimelineClipPreview = memo(function TimelineClipPreview({ asset, clip }: C
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [asset, clip.duration, clip.sourceEnd, clip.sourceStart, frameCacheKey, frameCount]);
+  }, [asset, clip, frameCacheKey, frameCount]);
 
   if (!asset) {
     return <div className="absolute inset-0 bg-[#241508]" />;
@@ -277,10 +293,12 @@ export default function TimelineRows({
   timelineLaneRef,
   timeToPercent,
   onPlayheadPointerDown,
+  onTimelinePointerDown,
   onLayerPointerDown,
   onClipPointerDown,
   onSelectClip,
   onSelectLayer,
+  onSplitClip,
   onToggleClipMute,
   onDeleteClip,
   onDeleteLayer,
@@ -291,39 +309,117 @@ export default function TimelineRows({
     () => getTimelineStackItems(layers, timelineClips, canvasObjects),
     [canvasObjects, layers, timelineClips]
   );
-  const rowGap = 118;
-  const rowCount = Math.max(stackItems.length, 1);
-  const laneHeight = Math.max(320, rowCount * rowGap + 36);
-  const majorTickStep = useMemo(() => getTimelineTickStep(dur), [dur]);
+  const stackRows = useMemo(() => {
+    const rows: Array<{ key: string; itemKeys: string[] }> = [];
+    const rowIndexByKey = new Map<string, number>();
+
+    stackItems.forEach((item) => {
+      const rowKey = item.kind === 'clip' ? `clip-object:${item.clip.canvasObjectId}` : `layer:${item.id}`;
+      const itemKey = item.kind === 'clip' ? `clip:${item.id}` : `layer:${item.id}`;
+      const existingIndex = rowIndexByKey.get(rowKey);
+      if (existingIndex !== undefined) {
+        rows[existingIndex].itemKeys.push(itemKey);
+        return;
+      }
+
+      rowIndexByKey.set(rowKey, rows.length);
+      rows.push({ key: rowKey, itemKeys: [itemKey] });
+    });
+
+    return rows;
+  }, [stackItems]);
+  const rowIndexByItemKey = useMemo(() => {
+    const indexMap = new Map<string, number>();
+    stackRows.forEach((row, index) => {
+      row.itemKeys.forEach((itemKey) => indexMap.set(itemKey, index));
+    });
+    return indexMap;
+  }, [stackRows]);
+  const rowGap = 156;
+  const rowTopOffset = 54;
+  const rowCount = Math.max(stackRows.length, 1);
+  const laneHeight = Math.max(440, rowTopOffset + rowCount * rowGap + 28);
+  const majorTickStep = useMemo(() => getReadableTimelineTickStep(dur, timelineWidth), [dur, timelineWidth]);
   const minorTickStep = useMemo(() => getTimelineMinorTickStep(dur, majorTickStep), [dur, majorTickStep]);
   const majorTicks = useMemo(() => getTimelineTicks(dur, majorTickStep), [dur, majorTickStep]);
   const minorTicks = useMemo(() => getTimelineTicks(dur, minorTickStep), [dur, minorTickStep]);
+  const playheadTime = Math.max(0, Math.min(dur, currentTime));
+  const playheadPercent = timeToPercent(playheadTime);
+  const playheadEdgeBuffer = Math.max(0.25, dur * 0.02);
+  const playheadLabelTransform =
+    playheadTime <= playheadEdgeBuffer
+      ? 'translateX(6px)'
+      : playheadTime >= dur - playheadEdgeBuffer
+        ? 'translateX(calc(-100% - 6px))'
+        : 'translateX(-50%)';
   const selectedClip = useMemo(
-    () => timelineClips.find((clip) => clip.id === selectedClipId),
+    () => timelineClips.find((clip) => clip.id === selectedClipId) ?? null,
     [selectedClipId, timelineClips]
   );
-  const selectedClipIndex = useMemo(
-    () => selectedClip
-      ? stackItems.findIndex((item) => item.kind === 'clip' && item.id === selectedClip.id)
-      : -1,
-    [selectedClip, stackItems]
+  const selectedLayer = useMemo(
+    () => layers.find((layer) => layer.id === selectedLayerId) ?? null,
+    [layers, selectedLayerId]
   );
-  const selectedClipLeft = useMemo(
-    () => selectedClip ? `${(selectedClip.timelineStart / dur) * 100}%` : '0%',
-    [dur, selectedClip]
+  const selectedClipRowIndex = selectedClip ? rowIndexByItemKey.get(`clip:${selectedClip.id}`) ?? -1 : -1;
+  const selectedLayerRowIndex = selectedLayer ? rowIndexByItemKey.get(`layer:${selectedLayer.id}`) ?? -1 : -1;
+  const selectedClipCenterTime = selectedClip ? selectedClip.timelineStart + Math.max(0, selectedClip.duration) / 2 : 0;
+  const selectedLayerCenterTime = selectedLayer ? selectedLayer.startTime + Math.max(0, selectedLayer.endTime - selectedLayer.startTime) / 2 : 0;
+  const toolbarEdgeBuffer = Math.max(0.25, dur * 0.02);
+  const selectedClipToolbarTransform =
+    selectedClipCenterTime <= toolbarEdgeBuffer
+      ? 'translateX(6px)'
+      : selectedClipCenterTime >= dur - toolbarEdgeBuffer
+        ? 'translateX(calc(-100% - 6px))'
+        : 'translateX(-50%)';
+  const selectedLayerToolbarTransform =
+    selectedLayerCenterTime <= toolbarEdgeBuffer
+      ? 'translateX(6px)'
+      : selectedLayerCenterTime >= dur - toolbarEdgeBuffer
+        ? 'translateX(calc(-100% - 6px))'
+        : 'translateX(-50%)';
+  const draggedStackItem = useMemo(
+    () => stackDragPreview
+      ? stackItems.find((item) => item.kind === stackDragPreview.kind && item.id === stackDragPreview.id)
+      : null,
+    [stackDragPreview, stackItems]
   );
-  const selectedClipWidth = useMemo(
-    () => selectedClip ? `${Math.max(0.5, (selectedClip.duration / dur) * 100)}%` : '0%',
-    [dur, selectedClip]
-  );
-  const selectedClipTop = selectedClip && selectedClipIndex >= 0 ? 10 + selectedClipIndex * rowGap : 0;
-  const rowTopOffset = 10;
+  const draggedStackLabel = useMemo(() => {
+    if (!draggedStackItem) return '';
+    if (draggedStackItem.kind === 'layer') return draggedStackItem.layer.name;
+    const asset = assetById.get(draggedStackItem.clip.assetId);
+    return asset?.originalFileName ?? `${draggedStackItem.clip.type} clip`;
+  }, [assetById, draggedStackItem]);
 
   return (
     <>
-      <div className="sticky top-8 z-30 bg-[#18120a] pb-3">
-        <TrackRow label="Time" contentWidth={timelineWidth} heightClassName="h-10">
-          <TimelineTickStrip duration={dur} timeToPercent={timeToPercent} timelineWidth={timelineWidth} />
+      <div className="sticky top-8 z-[100] -mx-1 mb-3 rounded-2xl bg-[#18120a]/98 px-1 pb-2 pt-1 shadow-[0_16px_34px_rgba(0,0,0,0.45)] backdrop-blur">
+        <TrackRow label="Time" contentWidth={timelineWidth} heightClassName="h-12">
+          <div
+            className="relative z-[105] h-12 touch-none cursor-ew-resize rounded-xl bg-[#0d0803] p-1 shadow-[inset_0_-1px_0_rgba(242,212,11,0.22)]"
+            style={{ minWidth: `${timelineWidth}px` }}
+            onPointerDown={onTimelinePointerDown}
+            title="Drag to scrub the timeline"
+          >
+            <TimelineTickStrip
+              duration={dur}
+              labelsEvery={majorTickStep}
+              timeToPercent={timeToPercent}
+              timelineWidth={timelineWidth}
+            />
+            <div
+              className="pointer-events-none absolute bottom-1 top-1 z-[120] w-0"
+              style={{ left: playheadPercent }}
+            >
+              <div className="absolute left-1/2 top-0 h-full w-[3px] -translate-x-1/2 rounded-full bg-[#f2d40b] shadow-[0_0_18px_rgba(242,212,11,0.85)]" />
+              <div className="absolute bottom-0 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 rounded-[3px] bg-[#f2d40b] shadow-[0_0_14px_rgba(242,212,11,0.65)]" />
+            </div>
+            <span
+              className="pointer-events-none absolute top-0 z-[125] whitespace-nowrap rounded-full border border-[#f2d40b] bg-[#1a0c05] px-2 py-1 font-mono text-[10px] font-black leading-none text-[#fff6b0] shadow-[0_8px_18px_rgba(0,0,0,0.45),0_0_14px_rgba(242,212,11,0.32)]"
+              style={{ left: playheadPercent, transform: playheadLabelTransform }}
+            >
+              {formatTick(playheadTime)}
+            </span>
+          </div>
         </TrackRow>
       </div>
 
@@ -334,8 +430,10 @@ export default function TimelineRows({
       >
         <div
           ref={timelineLaneRef}
-          className="relative w-full rounded bg-[#1a0f04] shadow-inner"
+          className="relative w-full rounded-xl bg-[#1a0f04] shadow-inner"
+          onPointerDown={onTimelinePointerDown}
           style={{
+            minWidth: `${timelineWidth}px`,
             height: laneHeight,
             backgroundImage: 'linear-gradient(to right, rgba(201,182,0,0.16) 1px, transparent 1px)',
             backgroundSize: `calc(100% / ${Math.max(1, Math.ceil(dur / 10))}) 100%`,
@@ -366,67 +464,151 @@ export default function TimelineRows({
 
           {stackDragPreview ? (
             <div
-              className="pointer-events-none absolute left-0 right-0 z-10 h-[3px] rounded-full bg-[#f2d40b] shadow-[0_0_14px_rgba(242,212,11,0.75)]"
+              className="pointer-events-none absolute left-2 right-2 z-[26] flex h-28 items-center justify-center rounded-xl border-2 border-dashed border-[#f2d40b] bg-[#f2d40b]/10 text-[10px] font-bold uppercase tracking-[0.22em] text-[#f2d40b] shadow-[inset_0_0_22px_rgba(242,212,11,0.16),0_0_18px_rgba(242,212,11,0.25)] transition-[top,opacity,transform] duration-150 ease-out"
               style={{
                 top: `${
-                  rowTopOffset + stackDragPreview.targetIndex * rowGap
+                  rowTopOffset + Math.max(0, Math.min(rowCount - 1, stackDragPreview.targetIndex)) * rowGap
                 }px`,
-              }}
-            />
-          ) : null}
-
-          {selectedClip ? (
-            <div
-              className="absolute z-40 flex items-center gap-1 rounded bg-[#2d1a08]/95 px-1 py-1 shadow-lg ring-1 ring-[#5a3f11]"
-              style={{
-                left: `calc(${selectedClipLeft} + (${selectedClipWidth} / 2))`,
-                top: `${Math.max(0, selectedClipTop - 22)}px`,
-                transform: 'translateX(-50%)',
+                transform: 'scale(1.01)',
               }}
             >
-              {selectedClip.type === 'video' ? (
-                <button
-                  type="button"
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleClipMute(selectedClip.id);
-                  }}
-                  className="flex h-7 w-7 items-center justify-center rounded bg-black/55 text-[#e8d5a0] hover:text-[#f2d40b]"
-                  title={selectedClip.muted ? 'Unmute clip' : 'Mute clip'}
-                >
-                  {selectedClip.muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                </button>
-              ) : null}
+              Drop here
+            </div>
+          ) : null}
+
+          {stackDragPreview && draggedStackItem ? (
+            <div
+              className="pointer-events-none fixed z-[80] w-64 max-w-[72vw] rounded-2xl border border-[#f2d40b] bg-[#1f1307]/95 px-4 py-3 text-[#fff0a6] shadow-[0_24px_54px_rgba(0,0,0,0.5),0_0_28px_rgba(242,212,11,0.32)] backdrop-blur-sm"
+              style={{
+                left: stackDragPreview.clientX,
+                top: stackDragPreview.clientY,
+                transform: 'translate(16px, -50%) rotate(-1.5deg) scale(1.04)',
+              }}
+            >
+              <div className="flex items-center gap-2">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#f2d40b] text-[#1a0c05] shadow-[0_0_18px_rgba(242,212,11,0.35)]">
+                  <GripVertical size={18} />
+                </span>
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-bold">{draggedStackLabel}</div>
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-[#b69a4d]">
+                    Drop to reorder stack
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {selectedClip && selectedClipRowIndex >= 0 ? (
+            <div
+              className="absolute z-[60] flex max-w-[calc(100vw-5.5rem)] items-center gap-1 overflow-hidden rounded-xl border border-[#5a3f11] bg-[#1a0c05]/95 p-1 text-[#fff0a6] shadow-[0_14px_30px_rgba(0,0,0,0.45),0_0_18px_rgba(242,212,11,0.16)] backdrop-blur"
+              style={{
+                left: timeToPercent(selectedClipCenterTime),
+                top: `${Math.max(6, rowTopOffset + selectedClipRowIndex * rowGap - 42)}px`,
+                transform: selectedClipToolbarTransform,
+              }}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+            >
               <button
                 type="button"
-                onPointerDown={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                }}
                 onClick={(e) => {
                   e.stopPropagation();
                   onDeleteClip(selectedClip.id);
                 }}
-                className="flex h-7 w-7 items-center justify-center rounded bg-black/55 text-[#dcb4b4] hover:text-red-200"
+                className="flex min-h-9 min-w-9 items-center justify-center gap-1 rounded-lg bg-[#2a0705] px-2 text-red-200 ring-1 ring-red-300/25 hover:bg-red-950 hover:text-white"
                 title="Delete clip"
+                aria-label="Delete clip"
               >
                 <Trash2 size={14} />
+                <span className="hidden text-[10px] font-bold uppercase tracking-[0.12em] sm:inline">Delete</span>
+              </button>
+              {selectedClip.type === 'video' ? (
+                <button
+                  type="button"
+                  disabled={selectedClip.duration < MIN_CLIP_DURATION * 2}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (selectedClip.duration >= MIN_CLIP_DURATION * 2) onSplitClip(selectedClip.id);
+                  }}
+                  className={`flex min-h-9 min-w-9 items-center justify-center gap-1 rounded-lg px-2 ring-1 ${
+                    selectedClip.duration >= MIN_CLIP_DURATION * 2
+                      ? 'bg-[#241b05] text-[#fff0a6] ring-[#f2d40b]/30 hover:bg-[#f2d40b] hover:text-[#1a0c05]'
+                      : 'cursor-not-allowed bg-black/35 text-[#6f6040] ring-white/10'
+                  }`}
+                  title={selectedClip.duration >= MIN_CLIP_DURATION * 2 ? 'Split video into two equal parts' : 'Video must be at least 6s to split'}
+                  aria-label="Split video clip"
+                >
+                  <Scissors size={14} />
+                  <span className="hidden text-[10px] font-bold uppercase tracking-[0.12em] sm:inline">Split</span>
+                </button>
+              ) : null}
+              {selectedClip.type === 'video' ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleClipMute(selectedClip.id);
+                  }}
+                  className="flex min-h-9 min-w-9 items-center justify-center gap-1 rounded-lg bg-[#241b05] px-2 text-[#fff0a6] ring-1 ring-[#f2d40b]/25 hover:bg-[#f2d40b] hover:text-[#1a0c05]"
+                  title={selectedClip.muted ? 'Unmute clip' : 'Mute clip'}
+                  aria-label={selectedClip.muted ? 'Unmute clip' : 'Mute clip'}
+                >
+                  {selectedClip.muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                  <span className="hidden text-[10px] font-bold uppercase tracking-[0.12em] sm:inline">
+                    {selectedClip.muted ? 'Unmute' : 'Mute'}
+                  </span>
+                </button>
+              ) : null}
+            </div>
+          ) : null}
+
+          {selectedLayer && selectedLayerRowIndex >= 0 ? (
+            <div
+              className="absolute z-[60] flex max-w-[calc(100vw-5.5rem)] items-center gap-1 overflow-hidden rounded-xl border border-[#5a3f11] bg-[#1a0c05]/95 p-1 text-[#fff0a6] shadow-[0_14px_30px_rgba(0,0,0,0.45),0_0_18px_rgba(242,212,11,0.16)] backdrop-blur"
+              style={{
+                left: timeToPercent(selectedLayerCenterTime),
+                top: `${Math.max(6, rowTopOffset + selectedLayerRowIndex * rowGap - 42)}px`,
+                transform: selectedLayerToolbarTransform,
+              }}
+              onPointerDown={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+              }}
+            >
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDeleteLayer(selectedLayer.id);
+                }}
+                className="flex min-h-9 min-w-9 items-center justify-center gap-1 rounded-lg bg-[#2a0705] px-2 text-red-200 ring-1 ring-red-300/25 hover:bg-red-950 hover:text-white"
+                title="Delete item"
+                aria-label="Delete item"
+              >
+                <Trash2 size={14} />
+                <span className="hidden text-[10px] font-bold uppercase tracking-[0.12em] sm:inline">Delete</span>
               </button>
             </div>
           ) : null}
 
           {stackItems.map((item, index) => {
-            const top = rowTopOffset + index * rowGap;
+            const itemKey = item.kind === 'clip' ? `clip:${item.id}` : `layer:${item.id}`;
+            const rowIndex = rowIndexByItemKey.get(itemKey) ?? index;
+            const top = rowTopOffset + rowIndex * rowGap;
 
             if (item.kind === 'clip') {
               const clip = item.clip;
               const asset = assetById.get(clip.assetId);
               const left = `${(clip.timelineStart / dur) * 100}%`;
-              const width = `${Math.max(0.5, (clip.duration / dur) * 100)}%`;
+              const clipDuration = Math.max(0, clip.duration);
+              const width = `${(clipDuration / dur) * 100}%`;
+              const clipPixelWidth = (clipDuration / dur) * Math.max(1, timelineWidth);
+              const showFullTimeLabels = clipPixelWidth >= 96;
+              const showCompactTimeLabel = !showFullTimeLabels && clipPixelWidth >= 24;
+              const compactClip = clipPixelWidth < 64;
               const selected = clip.id === selectedClipId;
               const isVideo = clip.type === 'video';
               const isImage = clip.type === 'image';
@@ -436,21 +618,21 @@ export default function TimelineRows({
               return (
                 <div
                   key={`clip-${clip.id}`}
-                  className={`group absolute h-24 overflow-hidden rounded border ${
+                  className={`group absolute h-28 overflow-hidden ${compactClip ? 'rounded-md' : 'rounded-xl'} border ${
                     selected
                       ? 'bg-[#c9b600] border-[#f0dd2a] text-[#1a0c05]'
                       : isVideo
                         ? 'bg-[#3b360d] border-[#7b7d20] text-[#e8d5a0] hover:border-[#c9b600]'
                         : 'bg-[#183129] border-[#31725f] text-[#d6f5e8] hover:border-[#55caa5]'
-                  } touch-none cursor-grab active:cursor-grabbing`}
+                  } touch-none cursor-grab transition-[transform,opacity,box-shadow,border-color] duration-150 ease-out active:cursor-grabbing`}
                   style={{
                     left,
                     top,
-                    width: `max(96px, ${width})`,
+                    width,
                     zIndex: isStackDragging ? 35 : selected ? 30 : 20,
-                    opacity: isStackDragging ? 0.78 : 1,
-                    transform: isStackDragging ? 'scale(1.02)' : 'scale(1)',
-                    boxShadow: isStackDragging ? '0 0 0 2px rgba(242,212,11,0.5), 0 12px 22px rgba(0,0,0,0.28)' : undefined,
+                    opacity: isStackDragging ? 0.34 : 1,
+                    transform: isStackDragging ? 'scale(0.98)' : 'scale(1)',
+                    boxShadow: isStackDragging ? 'inset 0 0 0 2px rgba(242,212,11,0.55)' : undefined,
                   }}
                   onPointerDown={(e) => onClipPointerDown(e, clip, 'move')}
                   onClick={(e) => {
@@ -465,13 +647,13 @@ export default function TimelineRows({
                     <>
                       {isVideo ? (
                         <div
-                          className="absolute left-0 top-0 z-20 h-full w-4 touch-none cursor-ew-resize bg-[#f2d40b]/75 opacity-80 hover:opacity-100 sm:w-3"
+                          className={`${compactClip ? 'w-2' : 'w-5 sm:w-4'} absolute left-0 top-0 z-20 h-full touch-none cursor-ew-resize bg-[#f2d40b]/75 opacity-80 hover:opacity-100`}
                           onPointerDown={(e) => onClipPointerDown(e, clip, 'start')}
                           title="Trim start"
                         />
                       ) : null}
                       <div
-                        className={`absolute right-0 top-0 z-20 h-full w-4 touch-none cursor-ew-resize opacity-80 hover:opacity-100 sm:w-3 ${
+                        className={`${compactClip ? 'w-2' : 'w-5 sm:w-4'} absolute right-0 top-0 z-20 h-full touch-none cursor-ew-resize opacity-80 hover:opacity-100 ${
                           isImage ? 'bg-[#55caa5]/80' : 'bg-[#f2d40b]/75'
                         }`}
                         onPointerDown={(e) => onClipPointerDown(e, clip, 'end')}
@@ -479,12 +661,20 @@ export default function TimelineRows({
                       />
                     </>
                   ) : null}
-                  <div className="pointer-events-none absolute bottom-1 left-2 z-20 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[9px] font-bold text-[#fff0a6] opacity-80 ring-1 ring-white/10 group-hover:opacity-100">
-                    {formatTick(clip.timelineStart)}
-                  </div>
-                  <div className="pointer-events-none absolute bottom-1 right-2 z-20 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[9px] font-bold text-[#fff0a6] opacity-80 ring-1 ring-white/10 group-hover:opacity-100">
-                    {formatTick(clipEnd)}
-                  </div>
+                  {showFullTimeLabels ? (
+                    <>
+                      <div className="pointer-events-none absolute bottom-1 left-2 z-20 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[9px] font-bold text-[#fff0a6] opacity-80 ring-1 ring-white/10 group-hover:opacity-100">
+                        {formatTick(clip.timelineStart)}
+                      </div>
+                      <div className="pointer-events-none absolute bottom-1 right-2 z-20 rounded bg-black/70 px-1.5 py-0.5 font-mono text-[9px] font-bold text-[#fff0a6] opacity-80 ring-1 ring-white/10 group-hover:opacity-100">
+                        {formatTick(clipEnd)}
+                      </div>
+                    </>
+                  ) : showCompactTimeLabel ? (
+                    <div className="pointer-events-none absolute bottom-1 left-1/2 z-20 -translate-x-1/2 rounded bg-black/75 px-1 py-0.5 font-mono text-[8px] font-bold leading-none text-[#fff0a6]">
+                      {formatTick(clipDuration)}
+                    </div>
+                  ) : null}
                   <button
                     type="button"
                     onPointerDown={(e) => {
@@ -492,7 +682,9 @@ export default function TimelineRows({
                       e.stopPropagation();
                       onClipPointerDown(e, clip, 'z');
                     }}
-                    className="absolute left-3 top-3 z-20 flex h-9 w-9 touch-none cursor-grab items-center justify-center rounded-md border border-[#7b6a2b] bg-black/70 text-[#e7cf7f] active:cursor-grabbing hover:text-[#f2d40b] sm:h-8 sm:w-8"
+                    className={`absolute z-20 flex touch-none cursor-grab items-center justify-center border border-[#7b6a2b] bg-black/70 text-[#e7cf7f] transition-transform active:scale-95 active:cursor-grabbing hover:text-[#f2d40b] ${
+                      compactClip ? 'bottom-1 left-1 h-6 w-6 rounded' : 'left-2 top-12 h-8 w-8 rounded-md'
+                    }`}
                     title="Drag to change stack order"
                   >
                     <GripVertical size={16} />
@@ -504,26 +696,29 @@ export default function TimelineRows({
 
             const layer = item.layer;
             const left = `${(layer.startTime / dur) * 100}%`;
-            const width = `${Math.max(0.5, ((layer.endTime - layer.startTime) / dur) * 100)}%`;
+            const layerDuration = Math.max(0, layer.endTime - layer.startTime);
+            const width = `${(layerDuration / dur) * 100}%`;
+            const layerPixelWidth = (layerDuration / dur) * Math.max(1, timelineWidth);
+            const compactLayer = layerPixelWidth < 64;
             const selected = layer.id === selectedLayerId;
             const isStackDragging = stackDragPreview?.kind === 'layer' && stackDragPreview.id === layer.id;
 
             return (
               <div
                 key={`layer-${layer.id}`}
-                className={`absolute h-24 overflow-hidden rounded border ${
+                className={`absolute h-28 overflow-hidden ${compactLayer ? 'rounded-md' : 'rounded-xl'} border ${
                   selected
                     ? 'bg-[#c9b600] border-[#f0dd2a] text-[#1a0c05]'
                     : 'bg-[#2e2340] border-[#6f5790] text-[#eadfff] hover:border-[#b79bea]'
-                }`}
+                } touch-none cursor-grab transition-[transform,opacity,box-shadow,border-color] duration-150 ease-out active:cursor-grabbing`}
                 style={{
                   left,
                   top,
-                  width: `max(96px, ${width})`,
+                  width,
                   zIndex: isStackDragging ? 34 : selected ? 28 : 18,
-                  opacity: isStackDragging ? 0.78 : 1,
-                  transform: isStackDragging ? 'scale(1.02)' : 'scale(1)',
-                  boxShadow: isStackDragging ? '0 0 0 2px rgba(242,212,11,0.5), 0 12px 22px rgba(0,0,0,0.28)' : undefined,
+                  opacity: isStackDragging ? 0.34 : 1,
+                  transform: isStackDragging ? 'scale(0.98)' : 'scale(1)',
+                  boxShadow: isStackDragging ? 'inset 0 0 0 2px rgba(242,212,11,0.55)' : undefined,
                 }}
                 onPointerDown={(e) => onLayerPointerDown(e, layer, 'move')}
                 onClick={(e) => {
@@ -533,7 +728,7 @@ export default function TimelineRows({
                 title={`${layer.startTime.toFixed(2)}s-${layer.endTime.toFixed(2)}s`}
               >
                 <div
-                  className="absolute left-0 top-0 z-10 h-full w-4 touch-none cursor-ew-resize bg-[#f2d40b]/70 sm:w-2"
+                  className={`${compactLayer ? 'w-2' : 'w-5 sm:w-4'} absolute left-0 top-0 z-10 h-full touch-none cursor-ew-resize bg-[#f2d40b]/70`}
                   onPointerDown={(e) => onLayerPointerDown(e, layer, 'start')}
                 />
                 <div className="absolute inset-0 bg-black/45" />
@@ -545,35 +740,22 @@ export default function TimelineRows({
                     e.stopPropagation();
                     onLayerPointerDown(e, layer, 'z');
                   }}
-                  className="absolute left-3 top-3 z-20 flex h-9 w-9 touch-none cursor-grab items-center justify-center rounded-md border border-[#7b6a2b] bg-black/70 text-[#e7cf7f] active:cursor-grabbing hover:text-[#f2d40b] sm:h-8 sm:w-8"
+                  className={`absolute z-20 flex touch-none cursor-grab items-center justify-center border border-[#7b6a2b] bg-black/70 text-[#e7cf7f] transition-transform active:scale-95 active:cursor-grabbing hover:text-[#f2d40b] ${
+                    compactLayer ? 'bottom-1 left-1 h-6 w-6 rounded' : 'left-2 top-12 h-8 w-8 rounded-md'
+                  }`}
                   title="Drag to change stack order"
                 >
                   <GripVertical size={16} />
                 </button>
-                <button
-                  type="button"
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteLayer(layer.id);
-                  }}
-                  className="absolute right-1 top-1/2 z-20 flex h-6 w-6 -translate-y-1/2 items-center justify-center rounded bg-black/55 hover:text-red-200"
-                  title="Delete item"
-                >
-                  <Trash2 size={13} />
-                </button>
                 <div
-                  className="absolute right-0 top-0 z-10 h-full w-4 touch-none cursor-ew-resize bg-[#f2d40b]/70 sm:w-2"
+                  className={`${compactLayer ? 'w-2' : 'w-5 sm:w-4'} absolute right-0 top-0 z-10 h-full touch-none cursor-ew-resize bg-[#f2d40b]/70`}
                   onPointerDown={(e) => onLayerPointerDown(e, layer, 'end')}
                 />
               </div>
             );
           })}
 
-          <Playhead left={timeToPercent(currentTime)} onPointerDown={onPlayheadPointerDown} />
+          <Playhead left={playheadPercent} onPointerDown={onPlayheadPointerDown} />
         </div>
       </TrackRow>
     </>

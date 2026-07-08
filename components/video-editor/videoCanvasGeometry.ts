@@ -6,6 +6,29 @@ interface DragDelta {
   deltaY: number;
 }
 
+const MIN_OBJECT_SIZE = 2;
+const MAX_OBJECT_SIZE = 100;
+
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function clampSize(value: number) {
+  return clamp(value, MIN_OBJECT_SIZE, MAX_OBJECT_SIZE);
+}
+
+function clampRectToCanvas(x: number, y: number, width: number, height: number) {
+  const safeWidth = clampSize(width);
+  const safeHeight = clampSize(height);
+
+  return {
+    x: clamp(x, 0, 100 - safeWidth),
+    y: clamp(y, 0, 100 - safeHeight),
+    width: safeWidth,
+    height: safeHeight,
+  };
+}
+
 export function calcDragDelta(
   event: MouseEvent | PointerEvent,
   state: LayerDragState
@@ -17,7 +40,7 @@ export function calcDragDelta(
 }
 
 export function buildDraggedLayerRect(
-  layer: Pick<Layer | CanvasObject, 'x' | 'y' | 'width' | 'height'>,
+  _layer: Pick<Layer | CanvasObject, 'x' | 'y' | 'width' | 'height'>,
   action: LayerDragAction,
   state: LayerDragState,
   deltaX: number,
@@ -25,51 +48,33 @@ export function buildDraggedLayerRect(
 ): { x: number; y: number; width: number; height: number } {
   const { startX, startY, startW, startH } = state;
   if (action === 'move') {
-    return {
-      x: Math.max(0, Math.min(100 - startW, startX + deltaX)),
-      y: Math.max(0, Math.min(100 - startH, startY + deltaY)),
-      width: startW,
-      height: startH,
-    };
+    return clampRectToCanvas(startX + deltaX, startY + deltaY, startW, startH);
   }
 
-  let x = layer.x;
-  let y = layer.y;
-  let width = layer.width;
-  let height = layer.height;
+  let x = startX;
+  let y = startY;
+  let width = startW;
+  let height = startH;
+  const right = startX + startW;
+  const bottom = startY + startH;
 
   if (action === 'resize-br') {
-    width = Math.max(5, Math.min(100 - startX, startW + deltaX));
-    height = Math.max(5, Math.min(100 - startY, startH + deltaY));
+    width = clampSize(startW + deltaX);
+    height = clampSize(startH + deltaY);
   } else if (action === 'resize-bl') {
-    const nextW = startW - deltaX;
-    if (nextW > 5 && startX + deltaX >= 0) {
-      x = startX + deltaX;
-      width = nextW;
-    }
-    height = Math.max(5, Math.min(100 - startY, startH + deltaY));
+    width = clampSize(startW - deltaX);
+    x = right - width;
+    height = clampSize(startH + deltaY);
   } else if (action === 'resize-tr') {
-    width = Math.max(5, Math.min(100 - startX, startW + deltaX));
-    const nextH = Math.max(5, startH - deltaY);
-    const nextY = startY + (startH - nextH);
-    if (startH - deltaY > 5 && nextY >= 0) {
-      y = nextY;
-      height = nextH;
-    } else {
-      height = startH;
-    }
+    width = clampSize(startW + deltaX);
+    height = clampSize(startH - deltaY);
+    y = bottom - height;
   } else {
-    const nextW = startW - deltaX;
-    if (nextW > 5 && startX + deltaX >= 0) {
-      x = startX + deltaX;
-      width = nextW;
-    }
-    const nextH = startH - deltaY;
-    if (nextH > 5 && startY + deltaY >= 0) {
-      y = startY + deltaY;
-      height = nextH;
-    }
+    width = clampSize(startW - deltaX);
+    height = clampSize(startH - deltaY);
+    x = right - width;
+    y = bottom - height;
   }
 
-  return { x, y, width, height };
+  return clampRectToCanvas(x, y, width, height);
 }

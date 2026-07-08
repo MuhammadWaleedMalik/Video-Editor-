@@ -8,12 +8,15 @@ export interface PreviewCanvasController {
   containerRef: React.RefObject<HTMLDivElement>;
   stageSize: { width: number; height: number };
   editingTextId: string | null;
+  canvasCursor: string;
   containerStyle: React.CSSProperties;
   setEditingTextId: (id: string | null) => void;
   measureCanvas: () => void;
   drawFrame: () => void;
   handleDrop: (e: React.DragEvent) => void;
   handleContainerClick: (e: React.PointerEvent) => void;
+  handleCanvasPointerMove: (e: React.PointerEvent) => void;
+  handleCanvasPointerLeave: () => void;
   handleTextChange: (id: string, text: string) => void;
   handleLayerMouseDown: (
     e: React.PointerEvent,

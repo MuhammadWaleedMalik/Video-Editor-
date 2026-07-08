@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react';
 import { EditorState, SubtitleChunk } from '@/types/editor';
 import { createProgressiveWhisperFromFile, ProgressiveWhisperController } from '@/src/lib/transcription';
 import { TRANSCRIBE_MODEL } from './videoEditorDefaults';
+import { renderEditedProjectForTranscription } from './renderEditedProject';
 
 export interface SubtitleControllers {
   transcribeLanguage: 'en' | 'ur' | 'auto';
@@ -35,9 +36,13 @@ export function useSubtitleControllers(
 
   const set = (patch: Partial<EditorState>) => setState(patch);
   const transcriptionRef = useRef<ProgressiveWhisperController | null>(null);
+  const renderAbortRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
-    return () => transcriptionRef.current?.cancel();
+    return () => {
+      renderAbortRef.current?.abort();
+      transcriptionRef.current?.cancel();
+    };
   }, []);
 
   function handleSubtitlesChange(chunks: SubtitleChunk[]) {
@@ -49,16 +54,32 @@ export function useSubtitleControllers(
   }
 
   async function handleAutoTranscribe() {
-    if (!state.videoFile) {
-      setTranscribeStatus('Upload a video first.');
+    const hasMainVideoAudio = state.timelineClips.some((clip) => {
+      const asset = state.mediaAssets.find((item) => item.id === clip.assetId);
+      return asset?.type === 'video' && asset.status === 'deployed' && !clip.muted;
+    });
+
+    if (!hasMainVideoAudio) {
+      setTranscribeStatus('Add an unmuted video to the main timeline before auto transcribing.');
       return;
     }
 
     setIsTranscribing(true);
-    setTranscribeStatus('Preparing audio...');
+    set({ isPlaying: false });
+    setTranscribeStatus('Rendering edited project for transcription...');
     try {
+      renderAbortRef.current?.abort();
       transcriptionRef.current?.cancel();
-      const controller = createProgressiveWhisperFromFile(state.videoFile, {
+      const renderAbort = new AbortController();
+      renderAbortRef.current = renderAbort;
+      const editedProjectFile = await renderEditedProjectForTranscription(state, {
+        fileName: 'edited-canvas-transcription.webm',
+        onProgress: setTranscribeStatus,
+        signal: renderAbort.signal,
+      });
+      renderAbortRef.current = null;
+      setTranscribeStatus('Extracting audio from edited project...');
+      const controller = createProgressiveWhisperFromFile(editedProjectFile, {
         modelName: TRANSCRIBE_MODEL,
         language: transcribeLanguage,
         dtype: 'q8',
@@ -84,6 +105,7 @@ export function useSubtitleControllers(
         error instanceof Error ? error.message : 'Transcription failed. Please try again.';
       setTranscribeStatus(message);
     } finally {
+      renderAbortRef.current = null;
       transcriptionRef.current = null;
       setIsTranscribing(false);
     }
@@ -111,6 +133,8 @@ export function useSubtitleControllers(
   }
 
   function handleTranscribeCancel() {
+    renderAbortRef.current?.abort();
+    renderAbortRef.current = null;
     transcriptionRef.current?.cancel();
     transcriptionRef.current = null;
     setIsTranscribing(false);

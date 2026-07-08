@@ -1,21 +1,26 @@
 'use client';
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Film, Image as ImageIcon, Layers, Loader2, Upload } from 'lucide-react';
-import { Layer, LayerType, MediaAsset } from '@/types/editor';
+import { Film, Image as ImageIcon, Layers, Loader2, Music, Trash2, Type as TypeIcon, Upload } from 'lucide-react';
+import { Layer, LayerType, MediaAsset, TextAsset } from '@/types/editor';
 import LayerTypeMenu, { ObjectType, OBJECT_TYPES } from './LayerTypeMenu';
-import LayerTile from './LayerTile';
+import { MAX_TIMELINE_DURATION_SECONDS } from './timelineModel';
 
 interface LeftSidebarProps {
   layers: Layer[];
   mediaAssets: MediaAsset[];
+  textAssets: TextAsset[];
   selectedLayerId: string | null;
   onSelectLayer: (id: string | null) => void;
   onAddLayer: (type: LayerType) => void;
   onDeleteLayer: (id: string) => void;
   onVideoUpload: (file: File) => void;
   onImageUpload: (file: File) => void;
+  onAudioUpload: (file: File) => void;
   onPlaceAsset: (id: string) => void;
+  onDeleteAsset: (id: string) => void;
+  onPlaceTextAsset: (id: string) => void;
+  onDeleteTextAsset: (id: string) => void;
   isUploadingMedia: boolean;
   uploadError: string | null;
 }
@@ -55,6 +60,7 @@ function waitForAssetVideoEvent(video: HTMLVideoElement, eventName: keyof HTMLVi
 
 async function buildAssetThumbnail(asset: MediaAsset) {
   if (asset.type === 'image') return asset.url;
+  if (asset.type === 'audio') return '';
 
   const video = document.createElement('video');
   video.crossOrigin = 'anonymous';
@@ -126,6 +132,11 @@ const AssetPreview = memo(function AssetPreview({ asset }: { asset: MediaAsset }
       return;
     }
 
+    if (asset.type === 'audio') {
+      setThumbnail(null);
+      return;
+    }
+
     requestAssetThumbnail(asset)
       .then((nextThumbnail) => {
         if (!cancelled) setThumbnail(nextThumbnail || null);
@@ -147,6 +158,15 @@ const AssetPreview = memo(function AssetPreview({ asset }: { asset: MediaAsset }
     );
   }
 
+  if (asset.type === 'audio') {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-1 bg-[#160d05] text-[#c9b600]">
+        <Music size={22} />
+        <span className="text-[9px] font-semibold uppercase tracking-wider text-[#7a6040]">Audio</span>
+      </div>
+    );
+  }
+
   if (!thumbnail) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-[#160d05] text-[#7a6040]">
@@ -158,60 +178,91 @@ const AssetPreview = memo(function AssetPreview({ asset }: { asset: MediaAsset }
   return <img src={thumbnail} alt={asset.originalFileName} className="h-full w-full object-cover" />;
 });
 
+const TextAssetPreview = memo(function TextAssetPreview({ asset }: { asset: TextAsset }) {
+  return (
+    <div
+      className="flex h-full w-full items-center justify-center overflow-hidden rounded-lg p-3 text-center"
+      style={{ backgroundColor: asset.bgColor === '#00000000' ? '#160d05' : asset.bgColor }}
+    >
+      <span
+        className="line-clamp-4 break-words font-semibold leading-tight"
+        style={{
+          color: asset.color,
+          fontFamily: asset.fontFamily,
+          fontSize: `${Math.max(10, Math.min(20, Math.round(asset.fontSize * 0.65)))}px`,
+        }}
+      >
+        {asset.text.trim() || 'Text'}
+      </span>
+    </div>
+  );
+});
+
 export default function LeftSidebar({
   layers,
   mediaAssets,
+  textAssets,
   selectedLayerId,
   onSelectLayer,
   onAddLayer,
   onDeleteLayer,
   onVideoUpload,
   onImageUpload,
+  onAudioUpload,
   onPlaceAsset,
+  onDeleteAsset,
+  onPlaceTextAsset,
+  onDeleteTextAsset,
   isUploadingMedia,
   uploadError,
 }: LeftSidebarProps) {
   const [activeType, setActiveType] = useState<ObjectType>('video');
   const videoInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
-
-  const grouped = useMemo(() => ({
-    image: layers.filter((layer) => layer.type === 'image'),
-    video: layers.filter((layer) => layer.type === 'video'),
-    text: layers.filter((layer) => layer.type === 'text'),
-    audio: layers.filter((layer) => layer.type === 'audio'),
-  }), [layers]);
+  const audioInputRef = useRef<HTMLInputElement>(null);
 
   const activeMeta = useMemo(() => OBJECT_TYPES.find((entry) => entry.type === activeType), [activeType]);
-  const activeList = grouped[activeType];
   const activeAssets = useMemo(
     () => mediaAssets.filter((asset) => asset.type === activeType),
     [activeType, mediaAssets]
   );
-  const hasItems = activeList.length > 0;
-  const ActiveIcon = activeMeta?.icon;
-  const isMediaTab = activeType === 'video' || activeType === 'image';
+  const isMediaTab = activeType === 'video' || activeType === 'image' || activeType === 'audio';
+  const isTextTab = activeType === 'text';
+  const usedTextAssetIds = useMemo(() => {
+    return new Set(
+      layers
+        .filter((layer) => layer.type === 'text' && layer.assetId)
+        .map((layer) => layer.assetId as string)
+    );
+  }, [layers]);
 
-  function handleFile(file: File | undefined, type: 'video' | 'image') {
+  function handleFile(file: File | undefined, type: 'video' | 'image' | 'audio') {
     if (!file) return;
     if (type === 'video') onVideoUpload(file);
-    else onImageUpload(file);
+    else if (type === 'image') onImageUpload(file);
+    else onAudioUpload(file);
+  }
+
+  function openActiveUpload() {
+    if (activeType === 'video') videoInputRef.current?.click();
+    else if (activeType === 'image') imageInputRef.current?.click();
+    else if (activeType === 'audio') audioInputRef.current?.click();
   }
 
   return (
-    <aside className="flex h-full w-full flex-col overflow-hidden border-r border-[#3d2510] bg-[#160d05]">
-        <div className="flex items-center gap-2 border-b border-[#3d2510] p-3">
+    <aside className="flex h-full w-full flex-col overflow-hidden border-b border-[#3d2510] bg-[#160d05] md:border-b-0 md:border-r">
+        <div className="flex items-center gap-2 border-b border-[#3d2510] p-4">
           <Layers size={13} className="text-[#c9b600]" />
           <h2 className="text-[#e8d5a0] text-xs font-bold uppercase tracking-wider">
             Layer Objects
           </h2>
         </div>
 
-        <div className="p-3 border-b border-[#3d2510]">
+        <div className="border-b border-[#3d2510] p-4">
           <LayerTypeMenu activeType={activeType} onChange={setActiveType} />
         </div>
 
-        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3 scrollbar-thin">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 scrollbar-thin">
           <div className="flex items-center justify-between">
             <h3 className="text-xs text-[#7a6040] font-semibold uppercase tracking-wider">
               {activeMeta?.title}
@@ -219,7 +270,7 @@ export default function LeftSidebar({
             {isMediaTab ? (
               <button
                 type="button"
-                onClick={() => (activeType === 'video' ? videoInputRef.current?.click() : imageInputRef.current?.click())}
+                onClick={openActiveUpload}
                 disabled={isUploadingMedia}
                 className="text-[10px] flex items-center gap-1 text-[#c9b600] hover:text-[#f6e78a] disabled:opacity-50"
               >
@@ -257,75 +308,160 @@ export default function LeftSidebar({
               e.currentTarget.value = '';
             }}
           />
-          {uploadError && isMediaTab ? (
+          <input
+            ref={audioInputRef}
+            type="file"
+            accept="audio/*"
+            className="hidden"
+            onChange={(e) => {
+              handleFile(e.currentTarget.files?.[0], 'audio');
+              e.currentTarget.value = '';
+            }}
+          />
+          {uploadError && (isMediaTab || isTextTab) ? (
             <p className="rounded border border-red-900/60 bg-red-950/30 p-2 text-[10px] text-red-200">{uploadError}</p>
+          ) : null}
+          {activeType === 'video' ? (
+            <p className="rounded-lg border border-[#4a3010] bg-[#201206] p-2 text-[10px] leading-relaxed text-[#b79b64]">
+              Max video length is 3 minutes ({MAX_TIMELINE_DURATION_SECONDS}s). Bigger videos are blocked before upload.
+            </p>
+          ) : null}
+          {activeType === 'audio' ? (
+            <p className="rounded-lg border border-[#4a3010] bg-[#201206] p-2 text-[10px] leading-relaxed text-[#b79b64]">
+              Max audio length is 3 minutes ({MAX_TIMELINE_DURATION_SECONDS}s). Bigger audio files are blocked before upload.
+            </p>
+          ) : null}
+          {activeType === 'image' ? (
+            <p className="rounded-lg border border-[#3d2510] bg-[#1d1006] p-2 text-[10px] leading-relaxed text-[#7a6040]">
+              Project timeline max is 3 minutes ({MAX_TIMELINE_DURATION_SECONDS}s).
+            </p>
           ) : null}
 
           {isMediaTab ? (
             activeAssets.length ? (
               <div className="grid grid-cols-1 gap-2">
                 {activeAssets.map((asset) => {
-                  const AssetIcon = asset.type === 'video' ? Film : ImageIcon;
+                  const AssetIcon = asset.type === 'video' ? Film : asset.type === 'image' ? ImageIcon : Music;
                   return (
-                    <button
+                    <div
                       key={asset.id}
-                      type="button"
-                      disabled={asset.status !== 'deployed'}
-                      onClick={() => onPlaceAsset(asset.id)}
-                      className="flex min-w-0 items-start gap-3 rounded-lg border border-[#3d2510] bg-[#241508] p-2 text-left text-[#c8b88a] hover:border-[#c9b600] disabled:opacity-60"
-                      title={asset.status === 'deployed' ? 'Add to canvas and timeline' : asset.status}
+                      className="relative flex min-w-0 items-start gap-3 rounded-xl border border-[#3d2510] bg-[#241508] p-3 text-left text-[#c8b88a] hover:border-[#c9b600]"
+                      title={
+                        asset.status === 'deployed'
+                          ? asset.type === 'audio'
+                            ? 'Add to timeline'
+                            : 'Add to canvas and timeline'
+                          : asset.status
+                      }
                     >
-                      <span className="relative h-16 w-28 shrink-0 overflow-hidden rounded-md border border-[#3d2510] bg-[#160d05]">
-                        <AssetPreview asset={asset} />
-                        <span className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded bg-black/60 text-[#f3dd84]">
-                          <AssetIcon size={11} />
+                      <button
+                        type="button"
+                        disabled={asset.status !== 'deployed'}
+                        onClick={() => onPlaceAsset(asset.id)}
+                        className="flex min-w-0 flex-1 items-start gap-3 text-left disabled:opacity-60"
+                      >
+                        <span className="relative h-20 w-32 shrink-0 overflow-hidden rounded-lg border border-[#3d2510] bg-[#160d05]">
+                          <AssetPreview asset={asset} />
+                          <span className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded bg-black/60 text-[#f3dd84]">
+                            <AssetIcon size={11} />
+                          </span>
                         </span>
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block line-clamp-2 text-[11px] font-semibold leading-tight">{asset.originalFileName}</span>
-                        <span className="mt-1 block text-[9px] text-[#7a6040]">
-                          {asset.status === 'deployed'
-                            ? asset.type === 'video'
-                              ? `${Math.round(asset.duration ?? 0)}s`
-                              : 'Image asset'
-                            : asset.status}
+                        <span className="min-w-0 flex-1">
+                          <span className="block line-clamp-2 text-[11px] font-semibold leading-tight">
+                            {asset.originalFileName}
+                          </span>
+                          <span className="mt-1 block text-[9px] text-[#7a6040]">
+                            {asset.status === 'deployed'
+                              ? asset.type === 'video'
+                                ? `${Math.round(asset.duration ?? 0)}s`
+                                : asset.type === 'audio'
+                                  ? `${Math.round(asset.duration ?? 0)}s audio`
+                                  : 'Image asset'
+                              : asset.status}
+                          </span>
+                          <span className="mt-2 inline-flex rounded bg-[#160d05] px-2 py-1 text-[9px] text-[#c9b600]">
+                            Click to add
+                          </span>
                         </span>
-                        <span className="mt-2 inline-flex rounded bg-[#160d05] px-2 py-1 text-[9px] text-[#c9b600]">
-                          Click to add
-                        </span>
-                      </span>
-                    </button>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => onDeleteAsset(asset.id)}
+                        className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-md bg-black/65 text-[#d7bfb0] transition-colors hover:text-red-300"
+                        title="Delete media"
+                        aria-label={`Delete ${asset.originalFileName}`}
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </div>
                   );
                 })}
               </div>
             ) : (
               <button
                 type="button"
-                onClick={() => (activeType === 'video' ? videoInputRef.current?.click() : imageInputRef.current?.click())}
+                onClick={openActiveUpload}
                 className="w-full rounded-lg border border-dashed border-[#3d2510] bg-[#241508] p-3 text-sm text-[#7a6040] hover:border-[#5a4530] hover:text-[#c9b600]"
               >
                 Upload your first {activeType}
               </button>
             )
-          ) : hasItems ? (
-            <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-thin md:grid md:grid-cols-2 md:overflow-visible md:pb-0">
-              {activeList.map((layer) => (
-                <div key={layer.id} className="w-28 flex-none md:w-auto">
-                  <LayerTile
-                    layer={layer}
-                    isSelected={selectedLayerId === layer.id}
-                    onSelect={onSelectLayer}
-                    onDelete={onDeleteLayer}
-                    previewIcon={ActiveIcon ?? Layers}
-                  />
-                </div>
-              ))}
+          ) : textAssets.length ? (
+            <div className="grid grid-cols-1 gap-2">
+              {textAssets.map((asset) => {
+                const usedInTimeline = usedTextAssetIds.has(asset.id);
+                return (
+                  <div
+                    key={asset.id}
+                    className="relative flex min-w-0 items-start gap-3 rounded-xl border border-[#3d2510] bg-[#241508] p-3 text-left text-[#c8b88a] hover:border-[#c9b600]"
+                    title="Add text to timeline"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => onPlaceTextAsset(asset.id)}
+                      className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                    >
+                      <span className="relative h-20 w-32 shrink-0 overflow-hidden rounded-lg border border-[#3d2510] bg-[#160d05]">
+                        <TextAssetPreview asset={asset} />
+                        <span className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded bg-black/60 text-[#f3dd84]">
+                          <TypeIcon size={11} />
+                        </span>
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block line-clamp-2 text-[11px] font-semibold leading-tight">
+                          {asset.name}
+                        </span>
+                        <span className="mt-1 block line-clamp-2 text-[9px] text-[#7a6040]">
+                          {asset.text || 'Text template'}
+                        </span>
+                        <span className="mt-2 inline-flex rounded bg-[#160d05] px-2 py-1 text-[9px] text-[#c9b600]">
+                          Click to add
+                        </span>
+                        {usedInTimeline ? (
+                          <span className="ml-1 mt-2 inline-flex rounded bg-[#2d1a08] px-2 py-1 text-[9px] text-[#d8c35d]">
+                            In timeline
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onDeleteTextAsset(asset.id)}
+                      className="absolute right-2 top-2 flex h-7 w-7 items-center justify-center rounded-md bg-black/65 text-[#d7bfb0] transition-colors hover:text-red-300"
+                      title={usedInTimeline ? 'Remove from timeline first' : 'Delete text'}
+                      aria-label={`Delete ${asset.name}`}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
+                );
+              })}
               <button
                 type="button"
                 onClick={() => onAddLayer(activeType as LayerType)}
-                className="flex aspect-square w-28 flex-none flex-col items-center justify-center rounded-lg border border-dashed border-[#3d2510] bg-[#241508] text-[10px] text-[#7a6040] hover:border-[#5a4530] hover:text-[#c9b600] md:w-auto"
+                className="flex min-h-20 w-full flex-col items-center justify-center rounded-lg border border-dashed border-[#3d2510] bg-[#241508] text-[10px] text-[#7a6040] hover:border-[#5a4530] hover:text-[#c9b600]"
               >
-                + Add more
+                + Add text template
               </button>
             </div>
           ) : (

@@ -2,6 +2,7 @@ import { CanvasObject, Layer, MediaAsset, TimelineClip } from '@/types/editor';
 
 export const MIN_CLIP_DURATION = 3;
 export const MIN_IMAGE_CLIP_DURATION = 1;
+export const MAX_TIMELINE_DURATION_SECONDS = 180;
 const EPSILON = 0.000001;
 
 function finiteSourceEnd(clip: TimelineClip): number {
@@ -12,30 +13,73 @@ export function isFinitePositive(value: number): boolean {
   return Number.isFinite(value) && value > 0;
 }
 
+export function clampProjectDuration(duration: number): number {
+  if (!Number.isFinite(duration)) return 0;
+  return Math.max(0, Math.min(MAX_TIMELINE_DURATION_SECONDS, duration));
+}
+
 export function calculateTimelineDuration(clips: Pick<TimelineClip, 'timelineStart' | 'duration'>[]): number {
   if (!clips.length) return 0;
-  return clips.reduce((maxEnd, clip) => {
+  const maxEnd = clips.reduce((currentMaxEnd, clip) => {
     const start = Number.isFinite(clip.timelineStart) ? Math.max(0, clip.timelineStart) : 0;
     const duration = Number.isFinite(clip.duration) ? Math.max(0, clip.duration) : 0;
-    return Math.max(maxEnd, start + duration);
+    return Math.max(currentMaxEnd, start + duration);
   }, 0);
+  return clampProjectDuration(maxEnd);
 }
 
 export function calculateLayerTimelineDuration(
   layers: Array<Pick<{ startTime: number; endTime: number }, 'startTime' | 'endTime'>>
 ): number {
   if (!layers.length) return 0;
-  return layers.reduce((maxEnd, layer) => {
+  const maxEnd = layers.reduce((currentMaxEnd, layer) => {
     const start = Number.isFinite(layer.startTime) ? Math.max(0, layer.startTime) : 0;
     const end = Number.isFinite(layer.endTime) ? Math.max(start, layer.endTime) : start;
-    return Math.max(maxEnd, end);
+    return Math.max(currentMaxEnd, end);
   }, 0);
+  return clampProjectDuration(maxEnd);
 }
 
 export function clampPlayhead(time: number, duration: number): number {
-  const safeDuration = Number.isFinite(duration) ? Math.max(0, duration) : 0;
+  const safeDuration = clampProjectDuration(duration);
   if (safeDuration === 0) return 0;
   return Math.max(0, Math.min(Number.isFinite(time) ? time : 0, safeDuration));
+}
+
+export function clampTimelineStartForDuration(timelineStart: number, duration: number): number {
+  const safeDuration = Number.isFinite(duration) ? Math.max(0, duration) : 0;
+  const maxStart = Math.max(0, MAX_TIMELINE_DURATION_SECONDS - Math.min(safeDuration, MAX_TIMELINE_DURATION_SECONDS));
+  return Math.max(0, Math.min(Number.isFinite(timelineStart) ? timelineStart : 0, maxStart));
+}
+
+export function fitClipToTimeline(clip: TimelineClip): TimelineClip {
+  const safeDuration = Number.isFinite(clip.duration) ? Math.max(0, clip.duration) : 0;
+  const timelineStart = Math.max(
+    0,
+    Math.min(Number.isFinite(clip.timelineStart) ? clip.timelineStart : 0, MAX_TIMELINE_DURATION_SECONDS)
+  );
+  const maxDuration = Math.max(0, MAX_TIMELINE_DURATION_SECONDS - timelineStart);
+  const duration = Math.min(safeDuration, maxDuration);
+  const sourceStart = Number.isFinite(clip.sourceStart) ? Math.max(0, clip.sourceStart) : 0;
+  return {
+    ...clip,
+    timelineStart,
+    sourceStart,
+    sourceEnd: sourceStart + duration,
+    duration,
+  };
+}
+
+export function clampLayerTiming<T extends Pick<Layer, 'startTime' | 'endTime'>>(layer: T): T {
+  const startTime = Math.max(
+    0,
+    Math.min(Number.isFinite(layer.startTime) ? layer.startTime : 0, MAX_TIMELINE_DURATION_SECONDS)
+  );
+  const endTime = Math.max(
+    startTime,
+    Math.min(Number.isFinite(layer.endTime) ? layer.endTime : startTime, MAX_TIMELINE_DURATION_SECONDS)
+  );
+  return { ...layer, startTime, endTime };
 }
 
 export function isClipActive(clip: TimelineClip, currentTime: number): boolean {
@@ -50,7 +94,7 @@ export function sourceTimeForClip(clip: TimelineClip, currentTime: number): numb
 }
 
 export function shouldRenderAsset(asset?: MediaAsset): asset is MediaAsset {
-  return Boolean(asset && asset.status === 'deployed' && asset.metadataLoaded);
+  return Boolean(asset && asset.type !== 'audio' && asset.status === 'deployed' && asset.metadataLoaded);
 }
 
 export function getRenderableClips(
@@ -79,7 +123,6 @@ export function getTimelineStackItems(
     })
     .filter((item): item is TimelineStackItem => Boolean(item));
   const layerItems = layers
-    .filter((layer) => layer.type !== 'audio')
     .map((layer): TimelineStackItem => ({ kind: 'layer', id: layer.id, order: layer.zIndex, layer }));
 
   return [...clipItems, ...layerItems].sort((a, b) => {
@@ -112,7 +155,12 @@ export function reorderTimelineStack(
   const orderByKey = new Map(
     reordered.map((item, index) => [`${item.kind}:${item.id}`, maxOrder - index] as const)
   );
-  const clipIdByObjectId = new Map(clips.map((clip) => [clip.canvasObjectId, clip.id]));
+  const clipIdsByObjectId = clips.reduce((map, clip) => {
+    const existing = map.get(clip.canvasObjectId) ?? [];
+    existing.push(clip.id);
+    map.set(clip.canvasObjectId, existing);
+    return map;
+  }, new Map<string, string[]>());
 
   return {
     layers: layers.map((layer) => {
@@ -120,9 +168,9 @@ export function reorderTimelineStack(
       return nextOrder ? { ...layer, zIndex: nextOrder } : layer;
     }),
     canvasObjects: canvasObjects.map((object) => {
-      const clipId = clipIdByObjectId.get(object.id);
-      if (!clipId) return object;
-      const nextOrder = orderByKey.get(`clip:${clipId}`);
+      const clipIds = clipIdsByObjectId.get(object.id);
+      if (!clipIds?.length) return object;
+      const nextOrder = Math.max(...clipIds.map((clipId) => orderByKey.get(`clip:${clipId}`) ?? 0));
       return nextOrder ? { ...object, drawOrder: nextOrder } : object;
     }),
   };
@@ -174,4 +222,48 @@ export function resizeImageClipEnd(clip: TimelineClip, nextSourceEnd: number): T
     sourceEnd,
     duration: sourceEnd - sourceStart,
   };
+}
+
+export function canSplitClip(clip: TimelineClip): boolean {
+  const duration = Number.isFinite(clip.duration) ? Math.max(0, clip.duration) : 0;
+  return clip.type === 'video' && duration >= MIN_CLIP_DURATION * 2;
+}
+
+export function splitClipAtMidpoint(
+  clip: TimelineClip,
+  secondClipId: string,
+  secondCanvasObjectId: string
+): [TimelineClip, TimelineClip] | null {
+  if (!canSplitClip(clip)) return null;
+
+  const sourceStart = Number.isFinite(clip.sourceStart) ? Math.max(0, clip.sourceStart) : 0;
+  const safeSourceEnd = finiteSourceEnd(clip);
+  const safeDuration = Math.min(Math.max(0, clip.duration), Math.max(0, safeSourceEnd - sourceStart));
+  if (safeDuration < MIN_CLIP_DURATION * 2) return null;
+
+  const firstDuration = safeDuration / 2;
+  const secondDuration = safeDuration - firstDuration;
+  const splitSourceTime = sourceStart + firstDuration;
+  const timelineStart = Number.isFinite(clip.timelineStart) ? Math.max(0, clip.timelineStart) : 0;
+
+  return [
+    {
+      ...clip,
+      sourceStart,
+      sourceEnd: splitSourceTime,
+      duration: firstDuration,
+      timelineStart,
+      selected: false,
+    },
+    {
+      ...clip,
+      id: secondClipId,
+      canvasObjectId: secondCanvasObjectId,
+      sourceStart: splitSourceTime,
+      sourceEnd: splitSourceTime + secondDuration,
+      duration: secondDuration,
+      timelineStart: timelineStart + firstDuration,
+      selected: true,
+    },
+  ];
 }

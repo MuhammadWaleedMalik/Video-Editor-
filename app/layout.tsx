@@ -9,7 +9,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="overflow-hidden bg-[#1a0c05] font-sans">{children}</body>
+      <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+      </head>
+      <body className="overflow-y-auto overflow-x-hidden bg-[#1a0c05] font-sans scrollbar-thin">{children}</body>
     </html>
   );
 }

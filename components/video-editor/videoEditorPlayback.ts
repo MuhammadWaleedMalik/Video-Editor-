@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { EditorState, VideoFormat } from '@/types/editor';
-import { clampPlayhead } from './timelineModel';
+import { clampPlayhead, clampProjectDuration } from './timelineModel';
+
+const PREVIEW_PLAYBACK_FPS = 30;
+const PREVIEW_PLAYBACK_FRAME_MS = 1000 / PREVIEW_PLAYBACK_FPS;
 
 export interface PlaybackControllers {
   handlePlayPause: () => void;
@@ -18,6 +21,10 @@ export function usePlaybackControllers(
 ): PlaybackControllers {
   const animationRef = useRef<number | null>(null);
   const lastTickRef = useRef<number | null>(null);
+  const lastPublishRef = useRef<number | null>(null);
+  const currentTimeRef = useRef(state.currentTime);
+  const playbackRateRef = useRef(state.playbackRate);
+  const durationRef = useRef(state.duration);
   const set = useCallback((patch: Partial<EditorState>) => {
     setState({ ...patch });
   }, [setState]);
@@ -25,23 +32,44 @@ export function usePlaybackControllers(
   const timelineDuration = state.duration;
 
   useEffect(() => {
+    currentTimeRef.current = state.currentTime;
+  }, [state.currentTime]);
+
+  useEffect(() => {
+    playbackRateRef.current = state.playbackRate;
+  }, [state.playbackRate]);
+
+  useEffect(() => {
+    durationRef.current = state.duration;
+  }, [state.duration]);
+
+  useEffect(() => {
     if (!state.isPlaying) {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
       animationRef.current = null;
       lastTickRef.current = null;
+      lastPublishRef.current = null;
       return;
     }
 
     const step = (now: number) => {
       if (lastTickRef.current == null) lastTickRef.current = now;
-      const delta = ((now - lastTickRef.current) / 1000) * state.playbackRate;
+      if (lastPublishRef.current == null) lastPublishRef.current = now;
+      const duration = durationRef.current;
+      const delta = ((now - lastTickRef.current) / 1000) * playbackRateRef.current;
       lastTickRef.current = now;
-      const next = clampPlayhead(state.currentTime + delta, timelineDuration);
-      if (timelineDuration <= 0 || next >= timelineDuration) {
-        set({ currentTime: timelineDuration, isPlaying: false });
+      const next = clampPlayhead(currentTimeRef.current + delta, duration);
+      currentTimeRef.current = next;
+
+      if (duration <= 0 || next >= duration) {
+        set({ currentTime: duration, isPlaying: false });
         return;
       }
-      set({ currentTime: next });
+
+      if (now - lastPublishRef.current >= PREVIEW_PLAYBACK_FRAME_MS) {
+        lastPublishRef.current = now;
+        set({ currentTime: next });
+      }
       animationRef.current = requestAnimationFrame(step);
     };
 
@@ -49,12 +77,12 @@ export function usePlaybackControllers(
     return () => {
       if (animationRef.current) cancelAnimationFrame(animationRef.current);
     };
-  }, [state.isPlaying, state.currentTime, state.playbackRate, timelineDuration, set]);
+  }, [state.isPlaying, set]);
 
   function handlePlayPause() {
     if (state.isPlaying) {
       if (videoRef.current) videoRef.current.pause();
-      set({ isPlaying: false });
+      set({ currentTime: currentTimeRef.current, isPlaying: false });
       return;
     }
     if (timelineDuration <= 0) {
@@ -62,26 +90,30 @@ export function usePlaybackControllers(
       return;
     }
     const seekTo = state.currentTime >= timelineDuration ? 0 : clampPlayhead(state.currentTime, timelineDuration);
+    currentTimeRef.current = seekTo;
     if (videoRef.current) videoRef.current.currentTime = seekTo;
     set({ currentTime: seekTo, isPlaying: true });
   }
 
   function handleTimeUpdate(time: number) {
     const clamped = clampPlayhead(time, timelineDuration);
+    currentTimeRef.current = clamped;
     if (videoRef.current) videoRef.current.currentTime = clamped;
     set({ currentTime: clamped });
   }
 
   function handleDurationChange(duration: number) {
+    const safeDuration = clampProjectDuration(duration);
     set({
-      duration,
+      duration: safeDuration,
       trimStart: 0,
-      trimEnd: duration,
+      trimEnd: safeDuration,
     });
   }
 
   function handleSeek(time: number) {
     const clamped = clampPlayhead(time, timelineDuration);
+    currentTimeRef.current = clamped;
     if (videoRef.current) videoRef.current.currentTime = clamped;
     set({ currentTime: clamped });
   }
@@ -91,6 +123,7 @@ export function usePlaybackControllers(
   }
 
   function handlePlaybackRateChange(playbackRate: number) {
+    playbackRateRef.current = playbackRate;
     if (videoRef.current) videoRef.current.playbackRate = playbackRate;
     set({ playbackRate });
   }

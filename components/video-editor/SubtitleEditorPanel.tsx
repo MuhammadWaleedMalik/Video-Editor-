@@ -98,20 +98,20 @@ export default function SubtitleEditorPanel({
   }
 
   return (
-    <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden border-l border-[#3d2510] bg-[#120a02]">
-      <div className="flex items-center justify-between px-4 py-3 border-b border-[#3d2510]">
-        <h2 className="text-[#e8d5a0] text-sm font-bold">Subtitles</h2>
-        <button className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#2d1a08] text-[#c8b88a] border border-[#3d2510]">
-          <Edit3 size={10} />
+    <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden border-t border-[#3d2510] bg-[#120a02] md:border-l md:border-t-0">
+      <div className="flex items-center justify-between border-b border-[#3d2510] px-5 py-4">
+        <h2 className="text-base font-bold text-[#e8d5a0]">Subtitles</h2>
+        <button className="rounded border border-[#3d2510] bg-[#2d1a08] px-3 py-1 text-[11px] font-bold text-[#c8b88a]">
+          <Edit3 size={12} />
         </button>
       </div>
 
-      <div className="px-4 py-2 border-b border-[#3d2510] flex flex-col gap-2">
+      <div className="flex flex-col gap-3 border-b border-[#3d2510] px-5 py-4">
         <label className="text-[9px] text-[#7a6040] uppercase font-bold tracking-wider">Subtitle Font</label>
         <select
           value={subtitleFontFamily}
           onChange={(e) => onSubtitleFontFamilyChange(e.target.value)}
-          className="bg-[#1f1005] border border-[#3d2510] rounded-lg px-2 py-1.5 text-xs text-[#e8d5a0] outline-none"
+          className="rounded-lg border border-[#3d2510] bg-[#1f1005] px-3 py-2 text-sm text-[#e8d5a0] outline-none"
         >
           {TEXT_THEMES.map((theme) => (
             <option key={theme.id} value={theme.fontFamily}>
@@ -141,7 +141,7 @@ export default function SubtitleEditorPanel({
         <select
           value={transcribeLanguage}
           onChange={(e) => onTranscribeLanguageChange(e.target.value as 'en' | 'ur' | 'auto')}
-          className="bg-[#1f1005] border border-[#3d2510] rounded-lg px-2 py-1.5 text-xs text-[#e8d5a0] outline-none"
+          className="rounded-lg border border-[#3d2510] bg-[#1f1005] px-3 py-2 text-sm text-[#e8d5a0] outline-none"
         >
           <option value="auto">Auto</option>
           <option value="en">English</option>
@@ -158,7 +158,7 @@ export default function SubtitleEditorPanel({
         />
 
         <button
-          className="w-full flex items-center justify-center gap-2 bg-[#1f1005] border border-[#3d2510] hover:border-[#7a6040] text-[#7a6040] hover:text-[#c8b88a] text-xs py-2 rounded-lg transition-colors"
+          className="flex w-full items-center justify-center gap-2 rounded-lg border border-[#3d2510] bg-[#1f1005] py-2.5 text-sm text-[#7a6040] transition-colors hover:border-[#7a6040] hover:text-[#c8b88a]"
           onClick={() => fileInputRef.current?.click()}
         >
           <Upload size={12} />
@@ -180,7 +180,7 @@ export default function SubtitleEditorPanel({
         onChunkTextChange={handleChunkTextChange}
       />
 
-      <div className="px-4 py-3 border-t border-[#3d2510]">
+      <div className="border-t border-[#3d2510] px-5 py-4">
         <div className="flex items-center gap-1 text-[#5a4530] text-[10px] flex-wrap">
           <span>Export as</span>
           <button onClick={exportSRT} className="text-[#9a8060] hover:text-[#c9b600] underline transition-colors">

@@ -4,7 +4,7 @@ export type MediaKind = 'video' | 'audio' | 'image';
 export type UploadedMediaResponse = {
   id: string;
   url: string;
-  type: 'video' | 'image';
+  type: 'video' | 'image' | 'audio';
   originalFileName: string;
   width?: number | null;
   height?: number | null;
@@ -100,8 +100,8 @@ export function loadImageMetadata(url: string): Promise<{ width: number; height:
 }
 
 export async function uploadMediaFile(file: File): Promise<UploadedMediaResponse> {
-  if (!file.type.startsWith('video/') && !file.type.startsWith('image/')) {
-    throw new Error('Unsupported file type. Choose a video or image file.');
+  if (!file.type.startsWith('video/') && !file.type.startsWith('image/') && !file.type.startsWith('audio/')) {
+    throw new Error('Unsupported file type. Choose a video, image, or audio file.');
   }
 
   const body = new FormData();

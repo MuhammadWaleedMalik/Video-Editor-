@@ -1,4 +1,4 @@
-import { CanvasObject, EditorState, Layer, MediaAsset, SubtitleChunk, TimelineClip } from '@/types/editor';
+import { CanvasObject, EditorState, Layer, MediaAsset, SubtitleChunk, TextAsset, TimelineClip } from '@/types/editor';
 
 export interface EditorDraftPayload {
   title: string;
@@ -14,6 +14,7 @@ export interface EditorDraftPayload {
   subtitleFontFamily: string;
   layers: Layer[];
   mediaAssets: MediaAsset[];
+  textAssets?: TextAsset[];
   timelineClips: TimelineClip[];
   canvasObjects: CanvasObject[];
   selectedClipId: string | null;
@@ -25,14 +26,21 @@ export interface EditorDraftPayload {
 
 export const IMPORTED_DRAFT_KEY = 'cvvid-imported-draft';
 
-export function buildEditorDraft(state: EditorState, title: string): EditorDraftPayload {
+export function buildEditorDraft(
+  state: EditorState,
+  title: string,
+  overrides: Partial<Pick<
+    EditorDraftPayload,
+    'currentTime' | 'duration' | 'trimStart' | 'trimEnd' | 'videoFileName' | 'videoUrl' | 'videoSourceHint'
+  >> = {}
+): EditorDraftPayload {
   return {
     title,
     format: state.format,
-    duration: state.duration,
-    currentTime: state.currentTime,
-    trimStart: state.trimStart,
-    trimEnd: state.trimEnd,
+    duration: overrides.duration ?? state.duration,
+    currentTime: overrides.currentTime ?? state.currentTime,
+    trimStart: overrides.trimStart ?? state.trimStart,
+    trimEnd: overrides.trimEnd ?? state.trimEnd,
     subtitles: state.subtitles,
     hasAudio: state.hasAudio,
     audioMuted: state.audioMuted,
@@ -40,13 +48,14 @@ export function buildEditorDraft(state: EditorState, title: string): EditorDraft
     subtitleFontFamily: state.subtitleFontFamily,
     layers: state.layers.map((layer) => ({ ...layer })),
     mediaAssets: state.mediaAssets.map((asset) => ({ ...asset })),
+    textAssets: state.textAssets.map((asset) => ({ ...asset })),
     timelineClips: state.timelineClips.map((clip) => ({ ...clip })),
     canvasObjects: state.canvasObjects.map((object) => ({ ...object })),
     selectedClipId: state.selectedClipId,
     selectedCanvasObjectId: state.selectedCanvasObjectId,
-    videoFileName: state.videoFile?.name ?? null,
-    videoUrl: state.videoUrl,
-    videoSourceHint: state.videoUrl ? 'blob-source' : null,
+    videoFileName: overrides.videoFileName ?? state.videoFile?.name ?? null,
+    videoUrl: overrides.videoUrl ?? state.videoUrl,
+    videoSourceHint: overrides.videoSourceHint ?? (state.videoUrl ? 'blob-source' : null),
   };
 }
 

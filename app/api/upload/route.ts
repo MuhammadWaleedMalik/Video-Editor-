@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 
 export const runtime = 'nodejs';
 
-const SUPPORTED_PREFIXES = ['video/', 'image/'];
+const SUPPORTED_PREFIXES = ['video/', 'image/', 'audio/'];
 
 function safeFileName(name: string) {
   const clean = name.replace(/[^a-z0-9._-]/gi, '-').replace(/-+/g, '-');
@@ -19,10 +19,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'No media file was uploaded.' }, { status: 400 });
     }
     if (!SUPPORTED_PREFIXES.some((prefix) => file.type.startsWith(prefix))) {
-      return NextResponse.json({ error: 'Unsupported file type. Upload a video or image.' }, { status: 415 });
+      return NextResponse.json({ error: 'Unsupported file type. Upload a video, image, or audio file.' }, { status: 415 });
     }
 
-    const type = file.type.startsWith('video/') ? 'video' : 'image';
+    const type = file.type.startsWith('video/') ? 'video' : file.type.startsWith('image/') ? 'image' : 'audio';
     const id = crypto.randomUUID();
     const originalFileName = file.name || `${type}-upload`;
     const extension = path.extname(originalFileName);

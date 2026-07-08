@@ -13,16 +13,31 @@ import { getTimelineStackItems, isClipActive, shouldRenderAsset, sourceTimeForCl
 type ImageCache = Map<string, HTMLImageElement>;
 interface VideoDecoder {
   video: HTMLVideoElement;
+  sourceUrl: string;
   token: number;
   lastFrame?: HTMLCanvasElement;
 }
 type VideoCache = Map<string, VideoDecoder>;
 type DragHit =
-  | { kind: 'object'; item: CanvasObject; action: LayerDragAction }
+  | { kind: 'object'; item: CanvasObject; clipId: string | null; action: LayerDragAction }
   | { kind: 'layer'; item: Layer; action: LayerDragAction };
 
 const background = '#050301';
 const handleSize = 9;
+const MAX_PREVIEW_RENDER_HEIGHT = 720;
+
+function pauseDecoderVideo(video: HTMLVideoElement) {
+  if (!video.paused) video.pause();
+  video.muted = true;
+  video.volume = 0;
+}
+
+function cursorForAction(action: LayerDragAction | null) {
+  if (action === 'resize-tl' || action === 'resize-br') return 'nwse-resize';
+  if (action === 'resize-tr' || action === 'resize-bl') return 'nesw-resize';
+  if (action === 'move') return 'grab';
+  return 'default';
+}
 
 function isCanvasObject(item: Layer | CanvasObject): item is CanvasObject {
   return 'drawOrder' in item;
@@ -34,6 +49,15 @@ function rectForObject(item: Pick<Layer | CanvasObject, 'x' | 'y' | 'width' | 'h
     y: (item.y / 100) * canvas.height,
     width: (item.width / 100) * canvas.width,
     height: (item.height / 100) * canvas.height,
+  };
+}
+
+function capPreviewRenderSize(size: { width: number; height: number }, format: keyof typeof FORMAT_RATIO) {
+  const maxWidth = Math.round(MAX_PREVIEW_RENDER_HEIGHT * FORMAT_RATIO[format]);
+  const scale = Math.min(1, maxWidth / Math.max(1, size.width), MAX_PREVIEW_RENDER_HEIGHT / Math.max(1, size.height));
+  return {
+    width: Math.max(1, Math.floor(size.width * scale)),
+    height: Math.max(1, Math.floor(size.height * scale)),
   };
 }
 
@@ -173,15 +197,20 @@ export function useVideoCanvasController({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const rafRef = useRef<number | null>(null);
   const imageCacheRef = useRef<ImageCache>(new Map());
   const videoCacheRef = useRef<VideoCache>(new Map());
   const drawFrameRef = useRef<() => void>(() => undefined);
   const renderTokenRef = useRef(0);
+  const stageVisibleRef = useRef(true);
   const [editingTextId, setEditingTextId] = useState<string | null>(null);
+  const [canvasCursor, setCanvasCursor] = useState('default');
   const [stageSize, setStageSize] = useState({ width: 0, height: 0 });
 
   const deployedAssetById = useMemo(() => new Map(mediaAssets.map((asset) => [asset.id, asset])), [mediaAssets]);
+
+  const pauseAllCachedVideos = useCallback(() => {
+    videoCacheRef.current.forEach(({ video }) => pauseDecoderVideo(video));
+  }, []);
 
   const measureCanvas = useCallback(() => {
     const viewport = viewportRef.current;
@@ -206,7 +235,13 @@ export function useVideoCanvasController({
   const getVideo = useCallback((clipId: string, url: string) => {
     const cache = videoCacheRef.current;
     const cached = cache.get(clipId);
-    if (cached) return cached;
+    if (cached && cached.sourceUrl === url) return cached;
+    if (cached) {
+      pauseDecoderVideo(cached.video);
+      cached.video.removeAttribute('src');
+      cached.video.load();
+      cache.delete(clipId);
+    }
     const video = document.createElement('video');
     video.preload = 'auto';
     video.crossOrigin = 'anonymous';
@@ -214,9 +249,16 @@ export function useVideoCanvasController({
     video.setAttribute('playsinline', 'true');
     video.setAttribute('webkit-playsinline', 'true');
     video.src = url;
-    video.onseeked = () => drawFrameRef.current();
+    const entry: VideoDecoder = { video, sourceUrl: url, token: 0 };
+    video.onloadeddata = () => {
+      entry.lastFrame = captureVideoFrame(video, entry.lastFrame);
+      drawFrameRef.current();
+    };
+    video.onseeked = () => {
+      entry.lastFrame = captureVideoFrame(video, entry.lastFrame);
+      drawFrameRef.current();
+    };
     video.oncanplay = () => drawFrameRef.current();
-    const entry: VideoDecoder = { video, token: 0 };
     cache.set(clipId, entry);
     return entry;
   }, []);
@@ -233,10 +275,13 @@ export function useVideoCanvasController({
     ctx.translate(rect.x + rect.width / 2, rect.y + rect.height / 2);
     ctx.rotate(((object.rotation || 0) * Math.PI) / 180);
     ctx.scale(object.scaleX || 1, object.scaleY || 1);
+    ctx.beginPath();
+    ctx.rect(-rect.width / 2, -rect.height / 2, rect.width, rect.height);
+    ctx.clip();
     if (drawSource) {
       const sourceSize = getSourceDimensions(drawSource);
       if (sourceSize?.width && sourceSize?.height) {
-        const fitScale = Math.min(rect.width / sourceSize.width, rect.height / sourceSize.height);
+        const fitScale = Math.max(rect.width / sourceSize.width, rect.height / sourceSize.height);
         const drawWidth = Math.max(1, sourceSize.width * fitScale);
         const drawHeight = Math.max(1, sourceSize.height * fitScale);
         ctx.drawImage(drawSource, -drawWidth / 2, -drawHeight / 2, drawWidth, drawHeight);
@@ -259,10 +304,16 @@ export function useVideoCanvasController({
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
-    const measured =
+    if ((typeof document !== 'undefined' && document.hidden) || !stageVisibleRef.current) {
+      pauseAllCachedVideos();
+      return;
+    }
+
+    const displaySize =
       stageSize.width && stageSize.height
         ? stageSize
         : getCanvasSize(1280, 720, format, viewport?.clientWidth, viewport?.clientHeight);
+    const measured = capPreviewRenderSize(displaySize, format);
 
     if (canvas.width !== measured.width || canvas.height !== measured.height) {
       canvas.width = measured.width;
@@ -276,16 +327,18 @@ export function useVideoCanvasController({
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     const activeClips = getRenderableClipsForAssets(timelineClips, deployedAssetById, currentTime);
-    const activeClipIds = new Set(activeClips.map((clip) => clip.id));
     const activeLayers = getActiveNonAudioLayers(layers, currentTime);
+    const activeVideoCacheIds = new Set([
+      ...activeClips.map((clip) => clip.id),
+      ...activeLayers
+        .filter((layer) => layer.type === 'video' && Boolean(layer.src))
+        .map((layer) => `layer:${layer.id}`),
+    ]);
     const renderItems = getTimelineStackItems(activeLayers, activeClips, canvasObjects).reverse();
 
     videoCacheRef.current.forEach((decoder, cacheId) => {
-      if (activeClipIds.has(cacheId)) return;
-      const hiddenVideo = decoder.video;
-      if (!hiddenVideo.paused) hiddenVideo.pause();
-      hiddenVideo.muted = true;
-      hiddenVideo.volume = 0;
+      if (activeVideoCacheIds.has(cacheId)) return;
+      pauseDecoderVideo(decoder.video);
     });
 
     renderItems.forEach((item) => {
@@ -315,12 +368,11 @@ export function useVideoCanvasController({
             // Browser decoders can reject seeks while metadata is still settling; the next render retries.
           }
         }
-        if (isPlaying) {
+        if (isPlaying && video.paused) {
           void video.play().catch(() => undefined);
-        } else {
+        } else if (!isPlaying && !video.paused) {
           video.pause();
         }
-        if (video.readyState >= 2) decoder.lastFrame = captureVideoFrame(video, decoder.lastFrame);
         const source = video.readyState >= 2 && !video.seeking ? video : decoder.lastFrame ?? null;
         drawCanvasObject(ctx, object, source, 'Loading video');
         return;
@@ -329,6 +381,44 @@ export function useVideoCanvasController({
       const layer = item.layer;
       if (layer.type === 'text') {
         drawTextLayer(ctx, layer);
+      } else if (layer.type === 'video' && layer.src) {
+        const decoder = getVideo(`layer:${layer.id}`, layer.src);
+        const desired = Math.max(0, currentTime - layer.startTime);
+        const video = decoder.video;
+        const muted = Boolean(audioMuted || layer.mediaMuted);
+        video.muted = muted;
+        video.volume = muted ? 0 : 1;
+        video.playbackRate = playbackRate;
+        const maxDrift = isPlaying ? 0.18 : 0.03;
+        if (Math.abs(video.currentTime - desired) > maxDrift && Number.isFinite(desired)) {
+          decoder.token = renderToken;
+          try {
+            video.currentTime = desired;
+          } catch {
+            // The browser can reject early seeks while it is still opening the media.
+          }
+        }
+        if (isPlaying && video.paused) {
+          void video.play().catch(() => undefined);
+        } else if (!isPlaying && !video.paused) {
+          video.pause();
+        }
+        const object: CanvasObject = {
+          id: layer.id,
+          type: 'video',
+          x: layer.x,
+          y: layer.y,
+          width: layer.width,
+          height: layer.height,
+          rotation: 0,
+          scaleX: 1,
+          scaleY: 1,
+          opacity: 1,
+          selected: false,
+          drawOrder: layer.zIndex,
+        };
+        const source = video.readyState >= 2 && !video.seeking ? video : decoder.lastFrame ?? null;
+        drawCanvasObject(ctx, object, source, 'Loading video');
       } else if (layer.src) {
         const image = getImage(layer.id, layer.src);
         const object: CanvasObject = {
@@ -369,6 +459,7 @@ export function useVideoCanvasController({
     getVideo,
     isPlaying,
     layers,
+    pauseAllCachedVideos,
     playbackRate,
     selectedLayerId,
     stageSize,
@@ -399,10 +490,10 @@ export function useVideoCanvasController({
         const rect = rectForObject(item.object, canvas);
         if (item.object.id === selectedCanvasObjectId || item.object.clipId === selectedClipId) {
           const handleAction = getHandleAction(rect, x, y);
-          if (handleAction) return { kind: 'object', item: item.object, action: handleAction };
+          if (handleAction) return { kind: 'object', item: item.object, clipId: item.clip.id, action: handleAction };
         }
         if (x >= rect.x && x <= rect.x + rect.width && y >= rect.y && y <= rect.y + rect.height) {
-          return { kind: 'object', item: item.object, action: 'move' };
+          return { kind: 'object', item: item.object, clipId: item.clip.id, action: 'move' };
         }
       } else {
         const rect = rectForObject(item.layer, canvas);
@@ -428,15 +519,21 @@ export function useVideoCanvasController({
     onAddLayerAtCoords(type, Math.max(0, Math.min(90, x)), Math.max(0, Math.min(90, y)));
   };
 
-  const handleLayerMouseDown = (e: React.PointerEvent, item: Layer | CanvasObject, action: LayerDragAction) => {
+  const handleLayerMouseDown = (
+    e: React.PointerEvent,
+    item: Layer | CanvasObject,
+    action: LayerDragAction,
+    activeClipId?: string | null
+  ) => {
     if (!e.isPrimary) return;
     e.preventDefault();
     e.stopPropagation();
     if (isCanvasObject(item)) {
-      onSelectClip(item.clipId ?? null);
+      onSelectClip(activeClipId ?? item.clipId ?? null);
     } else {
       onSelectLayer(item.id);
     }
+    setCanvasCursor(action === 'move' ? 'grabbing' : cursorForAction(action));
     if (!containerRef.current) return;
 
     const rect = containerRef.current.getBoundingClientRect();
@@ -465,6 +562,7 @@ export function useVideoCanvasController({
       document.removeEventListener('pointermove', onMove);
       document.removeEventListener('pointerup', onStop);
       document.removeEventListener('pointercancel', onStop);
+      setCanvasCursor('default');
     };
 
     document.addEventListener('pointermove', onMove);
@@ -479,16 +577,28 @@ export function useVideoCanvasController({
       onSelectLayer(null);
       onSelectClip(null);
       setEditingTextId(null);
+      setCanvasCursor('default');
       return;
     }
     if (hit.kind === 'object') {
-      onSelectClip(hit.item.clipId ?? null);
-      handleLayerMouseDown(e, hit.item, hit.action);
+      onSelectClip(hit.clipId);
+      handleLayerMouseDown(e, hit.item, hit.action, hit.clipId);
     } else {
       onSelectLayer(hit.item.id);
       handleLayerMouseDown(e, hit.item, hit.action);
     }
   };
+
+  const handleCanvasPointerMove = useCallback((e: React.PointerEvent) => {
+    if (!e.isPrimary) return;
+    const hit = hitTest(e.clientX, e.clientY);
+    const nextCursor = cursorForAction(hit?.action ?? null);
+    setCanvasCursor((previous) => (previous === nextCursor ? previous : nextCursor));
+  }, [hitTest]);
+
+  const handleCanvasPointerLeave = useCallback(() => {
+    setCanvasCursor('default');
+  }, []);
 
   const handleTextChange = (id: string, text: string) => {
     const target = layers.find((layer) => layer.id === id);
@@ -519,16 +629,37 @@ export function useVideoCanvasController({
   }, [drawFrame]);
 
   useEffect(() => {
-    if (!isPlaying) return;
-    const step = () => {
-      drawFrame();
-      rafRef.current = requestAnimationFrame(step);
+    const viewport = viewportRef.current;
+    const handleVisibilityChange = () => {
+      if (document.hidden || !stageVisibleRef.current) {
+        pauseAllCachedVideos();
+        return;
+      }
+      drawFrameRef.current();
     };
-    rafRef.current = requestAnimationFrame(step);
+
+    let observer: IntersectionObserver | null = null;
+    if (viewport && typeof IntersectionObserver !== 'undefined') {
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          stageVisibleRef.current = entry?.isIntersecting ?? true;
+          if (!stageVisibleRef.current) {
+            pauseAllCachedVideos();
+            return;
+          }
+          drawFrameRef.current();
+        },
+        { threshold: 0.01 }
+      );
+      observer.observe(viewport);
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => {
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      observer?.disconnect();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [drawFrame, isPlaying]);
+  }, [pauseAllCachedVideos]);
 
   useEffect(() => {
     const imageCache = imageCacheRef.current;
@@ -550,12 +681,15 @@ export function useVideoCanvasController({
     containerRef,
     stageSize,
     editingTextId,
+    canvasCursor,
     containerStyle,
     setEditingTextId,
     measureCanvas,
     drawFrame,
     handleDrop,
     handleContainerClick,
+    handleCanvasPointerMove,
+    handleCanvasPointerLeave,
     handleTextChange,
     handleLayerMouseDown,
   };

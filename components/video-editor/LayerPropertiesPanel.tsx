@@ -43,7 +43,7 @@ export default function LayerPropertiesPanel({
   }
 
   return (
-    <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-y-auto border-l border-[#3d2510] bg-[#120a02] scrollbar-thin">
+    <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-y-auto border-t border-[#3d2510] bg-[#120a02] scrollbar-thin md:border-l md:border-t-0">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[#3d2510] shrink-0">
         <button
           onClick={onBack}

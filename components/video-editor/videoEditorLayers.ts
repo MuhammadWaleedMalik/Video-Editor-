@@ -1,6 +1,12 @@
 import { createDefaultLayer } from './videoEditorDefaults';
 import { EditorState, Layer, LayerType } from '@/types/editor';
-import { calculateLayerTimelineDuration, calculateTimelineDuration, clampPlayhead, reorderTimelineStack } from './timelineModel';
+import {
+  calculateLayerTimelineDuration,
+  calculateTimelineDuration,
+  clampLayerTiming,
+  clampPlayhead,
+  reorderTimelineStack,
+} from './timelineModel';
 
 export function useLayerControllers(
   state: EditorState,
@@ -40,7 +46,8 @@ export function useLayerControllers(
   }
 
   function handleUpdateLayer(updated: Layer) {
-    const nextLayers = state.layers.map((l) => (l.id === updated.id ? updated : l));
+    const safeLayer = clampLayerTiming(updated);
+    const nextLayers = state.layers.map((l) => (l.id === safeLayer.id ? safeLayer : l));
     const duration = projectDuration(nextLayers);
     set({
       layers: nextLayers,
@@ -65,7 +72,9 @@ export function useLayerControllers(
   }
 
   function handleLayerTimingChange(id: string, startTime: number, endTime: number) {
-    const nextLayers = state.layers.map((layer) => (layer.id === id ? { ...layer, startTime, endTime } : layer));
+    const nextLayers = state.layers.map((layer) =>
+      layer.id === id ? clampLayerTiming({ ...layer, startTime, endTime }) : layer
+    );
     const duration = projectDuration(nextLayers);
     set({
       layers: nextLayers,

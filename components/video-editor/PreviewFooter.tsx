@@ -59,29 +59,30 @@ export default function PreviewFooter({
   }
 
   return (
-    <div className="px-4 py-3 flex flex-col gap-2 shrink-0">
+    <div className="flex shrink-0 flex-col gap-2 px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-4">
       <div
         ref={seekBarRef}
-        className="h-4 touch-none cursor-pointer py-1.5"
+        className="h-8 touch-none cursor-pointer py-3"
         onPointerDown={handleSeekPointerDown}
         onPointerMove={handleSeekPointerMove}
         onPointerUp={handleSeekPointerUp}
         onPointerCancel={handleSeekPointerUp}
       >
-        <div className="h-1.5 rounded-full bg-[#2d1a08]">
+        <div className="h-2 rounded-full bg-[#2d1a08]">
         <div
-          className="h-full bg-[#c9b600] rounded-full relative transition-all"
+          className="relative h-full rounded-full bg-[#c9b600] transition-all"
           style={{ width: `${progress * 100}%` }}
         >
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-[#c9b600] rounded-full border-2 border-[#1a0c05]" />
+          <div className="absolute right-0 top-1/2 h-5 w-5 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-[#1a0c05] bg-[#c9b600]" />
         </div>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
         <button
+          type="button"
           onClick={onTogglePlay}
-          className="w-8 h-8 rounded-full bg-[#c9b600] text-[#1a0c05] flex items-center justify-center hover:bg-[#e0cc00] transition-colors shrink-0"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#c9b600] text-[#1a0c05] transition-colors hover:bg-[#e0cc00]"
         >
           {playing ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
         </button>
@@ -90,17 +91,17 @@ export default function PreviewFooter({
           {formatTime(currentTime)} / {formatTime(startAt + totalDuration)}
         </span>
 
-        <div className="flex-1" />
-        <button onClick={onToggleMute} className="w-7 h-7 rounded-lg flex items-center justify-center text-[#7a6040] hover:text-[#c8b88a] hover:bg-[#2d1a08] transition-colors">
+        <div className="min-w-2 flex-1" />
+        <button type="button" onClick={onToggleMute} className="flex h-11 w-11 items-center justify-center rounded-lg text-[#7a6040] transition-colors hover:bg-[#2d1a08] hover:text-[#c8b88a]">
           {muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
         </button>
 
         <div className="flex items-center gap-2 text-[#5a4530] text-[10px]">
-          <button onClick={onExportSrt} className="hover:text-[#c9b600] underline">
+          <button type="button" onClick={onExportSrt} className="min-h-11 px-1 underline hover:text-[#c9b600]">
             SRT
           </button>
           <span>|</span>
-          <button onClick={onExportVtt} className="hover:text-[#c9b600] underline">
+          <button type="button" onClick={onExportVtt} className="min-h-11 px-1 underline hover:text-[#c9b600]">
             VTT
           </button>
         </div>

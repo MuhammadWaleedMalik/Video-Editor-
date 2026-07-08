@@ -1,6 +1,21 @@
-import { EditorState, Layer, LayerType } from '@/types/editor';
+import { EditorState, Layer, LayerType, TextAsset } from '@/types/editor';
 
 export const TRANSCRIBE_MODEL = 'onnx-community/whisper-base';
+
+export const DEFAULT_TEXT_ASSET_ID = 'default-text-template';
+
+export const DEFAULT_TEXT_ASSET: TextAsset = {
+  id: DEFAULT_TEXT_ASSET_ID,
+  type: 'text',
+  name: 'Text 1',
+  text: 'Double click to edit text',
+  fontSize: 20,
+  fontFamily: 'Inter, Arial, sans-serif',
+  themeId: 'inter-clean',
+  color: '#ffffff',
+  bgColor: '#00000000',
+  createdAt: 0,
+};
 
 export const initialState: EditorState = {
   videoFile: null,
@@ -20,6 +35,7 @@ export const initialState: EditorState = {
   layers: [],
   selectedLayerId: null,
   mediaAssets: [],
+  textAssets: [DEFAULT_TEXT_ASSET],
   timelineClips: [],
   canvasObjects: [],
   selectedClipId: null,
@@ -84,4 +100,28 @@ export function createDefaultLayer(type: LayerType, count: number, x = 30, y = 3
   }
   if (type === 'video') return { ...base, mediaMuted: true };
   return base;
+}
+
+export function createDefaultTextAsset(count: number): TextAsset {
+  const number = count + 1;
+  return {
+    ...DEFAULT_TEXT_ASSET,
+    id: crypto.randomUUID(),
+    name: `Text ${number}`,
+    createdAt: Date.now(),
+  };
+}
+
+export function createLayerFromTextAsset(asset: TextAsset, count: number, x = 30, y = 30): Layer {
+  return {
+    ...createDefaultLayer('text', count, x, y),
+    assetId: asset.id,
+    name: asset.name,
+    text: asset.text,
+    fontSize: asset.fontSize,
+    fontFamily: asset.fontFamily,
+    themeId: asset.themeId,
+    color: asset.color,
+    bgColor: asset.bgColor,
+  };
 }

@@ -63,48 +63,51 @@ export default function VideoPlaybackControls({
   }
 
   return (
-    <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-t border-[#3d2510]/60 px-1 pt-2 sm:gap-3">
+    <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-t border-[#3d2510]/60 px-1 pt-2 pb-[env(safe-area-inset-bottom)] sm:gap-3">
       <div
         ref={scrubberRef}
-        className="relative order-first h-5 basis-full cursor-ew-resize touch-none py-2"
+        className="relative order-first h-8 basis-full cursor-ew-resize touch-none py-3"
         onPointerDown={handleScrubberPointerDown}
         onPointerMove={handleScrubberPointerMove}
         onPointerUp={handleScrubberPointerUp}
         onPointerCancel={handleScrubberPointerUp}
         title="Drag to seek"
       >
-        <div className="h-1.5 rounded-full bg-[#2d1a08]">
+        <div className="h-2 rounded-full bg-[#2d1a08]">
           <div
             className="relative h-full rounded-full bg-[#c9b600]"
             style={{ width: `${scrubberProgress * 100}%` }}
           >
-            <div className="absolute right-0 top-1/2 h-3.5 w-3.5 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-[#1a0c05] bg-[#c9b600] shadow-[0_0_12px_rgba(201,182,0,0.35)]" />
+            <div className="absolute right-0 top-1/2 h-5 w-5 -translate-y-1/2 translate-x-1/2 rounded-full border-2 border-[#1a0c05] bg-[#c9b600] shadow-[0_0_12px_rgba(201,182,0,0.35)]" />
           </div>
         </div>
       </div>
       <button
+        type="button"
         onClick={onReset}
-        className="text-[#7a6040] hover:text-[#c9b600] transition-colors"
+        className="flex h-11 w-11 items-center justify-center rounded-lg text-[#7a6040] transition-colors hover:bg-[#2d1a08] hover:text-[#c9b600]"
       >
         <SkipBack size={15} />
       </button>
       <button
+        type="button"
         onClick={onToggleMute}
-        className="w-8 h-8 rounded-full border border-[#3d2510] text-[#7a6040] flex items-center justify-center hover:text-[#c9b600] hover:border-[#5a4530] transition-colors"
+        className="flex h-11 w-11 items-center justify-center rounded-full border border-[#3d2510] text-[#7a6040] transition-colors hover:border-[#5a4530] hover:text-[#c9b600]"
         title={audioMuted ? 'Unmute' : 'Mute'}
       >
         {audioMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
       </button>
       <button
+        type="button"
         onClick={onPlayPause}
-        className="w-8 h-8 rounded-full bg-[#c9b600] text-[#1a0c05] flex items-center justify-center hover:bg-[#e0cc00] transition-colors shrink-0"
+        className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#c9b600] text-[#1a0c05] transition-colors hover:bg-[#e0cc00]"
       >
         {isPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
       </button>
       <select
         value={playbackRate}
         onChange={(e) => onSpeedChange(Number(e.target.value))}
-        className="bg-[#1f1005] border border-[#3d2510] text-[#d7c58a] text-[11px] rounded-lg px-2 py-1 outline-none"
+        className="min-h-11 rounded-lg border border-[#3d2510] bg-[#1f1005] px-2 py-1 text-[11px] text-[#d7c58a] outline-none"
         title="Playback speed"
       >
         <option value={0.5}>0.5x</option>

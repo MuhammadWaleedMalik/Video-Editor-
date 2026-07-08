@@ -34,7 +34,7 @@ export default function LayerTypeMenu({ activeType, onChange }: LayerTypeMenuPro
             onClick={() => onChange(entry.type)}
             aria-pressed={isActive}
             aria-label={`Show ${entry.title}`}
-            className={`rounded-md p-2 border text-[10px] transition-colors ${
+            className={`min-h-14 rounded-md border p-2 text-[10px] transition-colors ${
               isActive
                 ? 'bg-[#2d1a08] border-[#c9b600] text-[#c9b600]'
                 : 'bg-[#241508] border-[#3d2510] text-[#c8b88a] hover:border-[#5a4530]'

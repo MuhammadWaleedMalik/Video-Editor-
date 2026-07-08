@@ -1,4 +1,5 @@
 import { Loader2, Pause, Play, Square, Wand2 } from 'lucide-react';
+import { useState } from 'react';
 
 interface TranscriptionControlsProps {
   isTranscribing: boolean;
@@ -17,10 +18,17 @@ export default function TranscriptionControls({
   onResume,
   onCancel,
 }: TranscriptionControlsProps) {
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  function handleConfirm() {
+    setConfirmOpen(false);
+    onAutoTranscribe();
+  }
+
   return (
     <div className="flex flex-col gap-2">
       <button
-        onClick={onAutoTranscribe}
+        onClick={() => setConfirmOpen(true)}
         disabled={isTranscribing}
         className={`w-full flex items-center justify-center gap-2 text-xs py-2 rounded-lg transition-colors ${
           isTranscribing
@@ -47,7 +55,40 @@ export default function TranscriptionControls({
       ) : null}
 
       {!!status && <p className="text-[10px] text-[#9a8060]">{status}</p>}
+
+      {confirmOpen ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-2xl border border-[#4a3010] bg-[#120a02] p-4 shadow-2xl">
+            <div className="flex items-center gap-2 text-[#f2d40b]">
+              <Wand2 size={15} />
+              <h3 className="text-sm font-bold">Auto Transcribe Edited Video?</h3>
+            </div>
+            <p className="mt-3 text-xs leading-relaxed text-[#c8b88a]">
+              Have you completed the editing? If yes, we will render the full edited canvas as one video,
+              use its main timeline audio, and add the generated text into subtitles.
+            </p>
+            <p className="mt-2 rounded-lg border border-[#3d2510] bg-[#1f1005] p-2 text-[10px] leading-relaxed text-[#9a8060]">
+              This will not transcribe every uploaded video. It only transcribes the final edited timeline output.
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmOpen(false)}
+                className="rounded-lg border border-[#3d2510] px-3 py-2 text-xs font-semibold text-[#9a8060] hover:border-[#7a6040] hover:text-[#c8b88a]"
+              >
+                Not Yet
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirm}
+                className="rounded-lg bg-[#c9b600] px-3 py-2 text-xs font-bold text-[#1a0c05] hover:bg-[#e0cc00]"
+              >
+                Yes, Transcribe
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
-

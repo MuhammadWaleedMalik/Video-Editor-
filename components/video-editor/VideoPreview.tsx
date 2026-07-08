@@ -98,7 +98,7 @@ export default function VideoPreview({
   });
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col gap-1.5 overflow-hidden p-1.5 sm:p-2">
+    <div className="flex h-full min-h-0 w-full flex-col gap-3 overflow-hidden p-3 sm:p-4">
       <VideoCanvasStage
         videoRef={videoRef}
         canvasRef={refs.canvasRef}
@@ -114,10 +114,13 @@ export default function VideoPreview({
         onSelectLayer={onSelectLayer}
         selectedLayerId={selectedLayerId}
         editingTextId={refs.editingTextId}
+        canvasCursor={refs.canvasCursor}
         onEditStart={refs.setEditingTextId}
         onTextChange={refs.handleTextChange}
         onUpdateLayer={onUpdateLayer}
         onLayerMouseDown={refs.handleLayerMouseDown}
+        onCanvasPointerMove={refs.handleCanvasPointerMove}
+        onCanvasPointerLeave={refs.handleCanvasPointerLeave}
         containerStyle={refs.containerStyle}
       />
 

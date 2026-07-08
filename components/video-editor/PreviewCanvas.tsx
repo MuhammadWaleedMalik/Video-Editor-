@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { SubtitleChunk, Layer } from '@/types/editor';
 import { FORMAT_RATIO } from './videoCanvas';
 import { VideoFormat } from '@/types/editor';
@@ -34,6 +34,9 @@ function PreviewLayerVideo({ src, muted, playing, layerTime }: PreviewLayerVideo
   useEffect(() => {
     const video = ref.current;
     if (!video) return;
+    video.autoplay = false;
+    video.setAttribute('playsinline', 'true');
+    video.setAttribute('webkit-playsinline', 'true');
 
     const nextTime = Number.isFinite(layerTime) ? Math.max(0, layerTime) : 0;
     if (Math.abs(video.currentTime - nextTime) > 0.12) {
@@ -61,6 +64,9 @@ function PreviewLayerVideo({ src, muted, playing, layerTime }: PreviewLayerVideo
       className="h-full w-full object-contain"
       muted={muted}
       playsInline
+      autoPlay={false}
+      controls={false}
+      disablePictureInPicture
       preload="metadata"
     />
   );
@@ -81,7 +87,17 @@ export default function PreviewCanvas({
   onEnded,
   onClick,
 }: PreviewCanvasProps) {
+  const mainVideoRef = useRef<HTMLVideoElement | null>(null);
   const baseFontPx = Math.max(12, Math.round(18 * (subtitleFontScale / 100)));
+  const handleMainVideoRef = useCallback((node: HTMLVideoElement | null) => {
+    mainVideoRef.current = node;
+    if (node) {
+      node.autoplay = false;
+      node.setAttribute('playsinline', 'true');
+      node.setAttribute('webkit-playsinline', 'true');
+    }
+    onRefReady(node);
+  }, [onRefReady]);
 
   return (
     <div
@@ -89,11 +105,14 @@ export default function PreviewCanvas({
       style={{ aspectRatio: FORMAT_RATIO[format], maxWidth: '100%' }}
     >
       <video
-        ref={onRefReady}
+        ref={handleMainVideoRef}
         src={videoUrl}
         className="w-full h-full object-contain bg-black"
         muted={muted}
         playsInline
+        autoPlay={false}
+        controls={false}
+        disablePictureInPicture
         preload="metadata"
         onTimeUpdate={onTimeUpdate}
         onEnded={onEnded}

@@ -1,7 +1,14 @@
-import { useCallback, useRef, useState } from 'react';
-import { CanvasObject, EditorState, LayerType, MediaAsset, TimelineClip } from '@/types/editor';
-import { loadImageMetadata, loadVideoMetadata, uploadMediaFile } from '@/lib/videoAssets';
-import { extractWaveform, initialState, createDefaultLayer } from './videoEditorDefaults';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { CanvasObject, EditorState, LayerType, MediaAsset, MediaAssetType, TimelineClip, TimelineClipType } from '@/types/editor';
+import { createBlobUrl, getMediaDuration, loadImageMetadata, loadVideoMetadata, revokeBlobUrl, uploadMediaFile } from '@/lib/videoAssets';
+import {
+  DEFAULT_TEXT_ASSET,
+  createDefaultTextAsset,
+  createDefaultLayer,
+  createLayerFromTextAsset,
+  extractWaveform,
+  initialState,
+} from './videoEditorDefaults';
 import { usePlaybackControllers } from './videoEditorPlayback';
 import { useLayerControllers } from './videoEditorLayers';
 import { useSubtitleControllers } from './videoEditorSubtitles';
@@ -9,13 +16,36 @@ import { loadEditorDraft } from '@/lib/editorDraft';
 import {
   calculateTimelineDuration,
   calculateLayerTimelineDuration,
+  clampLayerTiming,
   clampPlayhead,
+  clampProjectDuration,
+  clampTimelineStartForDuration,
+  canSplitClip,
+  fitClipToTimeline,
+  MAX_TIMELINE_DURATION_SECONDS,
   moveClip,
   reorderTimelineStack,
   resizeImageClipEnd,
+  splitClipAtMidpoint,
   trimClipEnd,
   trimClipStart,
 } from './timelineModel';
+
+function isVisualMediaAsset(asset: MediaAsset): asset is MediaAsset & { type: TimelineClipType } {
+  return asset.type === 'video' || asset.type === 'image';
+}
+
+function formatDurationLimit() {
+  return `${MAX_TIMELINE_DURATION_SECONDS}s (3 minutes)`;
+}
+
+function clampCanvasObjectRect(object: CanvasObject): CanvasObject {
+  const width = Number.isFinite(object.width) ? Math.max(2, Math.min(100, object.width)) : 10;
+  const height = Number.isFinite(object.height) ? Math.max(2, Math.min(100, object.height)) : 10;
+  const x = Number.isFinite(object.x) ? Math.max(0, Math.min(100 - width, object.x)) : 0;
+  const y = Number.isFinite(object.y) ? Math.max(0, Math.min(100 - height, object.y)) : 0;
+  return { ...object, x, y, width, height };
+}
 
 export interface VideoEditorController {
   state: EditorState;
@@ -31,7 +61,11 @@ export interface VideoEditorController {
   set: (patch: Partial<EditorState>) => void;
   handleVideoUpload: (file: File) => void;
   handleImageUpload: (file: File) => void;
+  handleAudioUpload: (file: File) => void;
   handlePlaceAsset: (assetId: string) => void;
+  handleDeleteAsset: (id: string) => void;
+  handlePlaceTextAsset: (assetId: string) => void;
+  handleDeleteTextAsset: (id: string) => void;
   handlePlayPause: () => void;
   handleTimeUpdate: (time: number) => void;
   handleDurationChange: (duration: number) => void;
@@ -49,6 +83,7 @@ export interface VideoEditorController {
   handleUpdateCanvasObject: (object: CanvasObject) => void;
   handleMoveClip: (id: string, timelineStart: number) => void;
   handleTrimClip: (id: string, edge: 'start' | 'end', sourceTime: number) => void;
+  handleSplitClip: (id: string) => void;
   handleClipOrderChange: (id: string, targetIndex: number) => void;
   handleToggleClipMute: (id: string) => void;
   handleDeleteClip: (id: string) => void;
@@ -66,30 +101,8 @@ export interface VideoEditorController {
 }
 
 export default function useVideoEditorController(): VideoEditorController {
-  const restoredDraft = typeof window === 'undefined' ? null : loadEditorDraft();
-  const [state, setState] = useState<EditorState>(() => restoredDraft ? {
-    ...initialState,
-    videoUrl: restoredDraft.videoUrl,
-    duration: restoredDraft.duration,
-    currentTime: Number.isFinite(restoredDraft.currentTime) ? restoredDraft.currentTime : 0,
-    trimStart: 0,
-    trimEnd: restoredDraft.duration,
-    subtitles: restoredDraft.subtitles,
-    hasAudio: restoredDraft.hasAudio,
-    audioMuted: restoredDraft.audioMuted ?? false,
-    subtitleFontScale: restoredDraft.subtitleFontScale,
-    subtitleFontFamily: restoredDraft.subtitleFontFamily,
-    format: restoredDraft.format,
-    layers: restoredDraft.layers,
-    mediaAssets: restoredDraft.mediaAssets ?? [],
-    timelineClips: restoredDraft.timelineClips ?? [],
-    canvasObjects: restoredDraft.canvasObjects ?? [],
-    selectedClipId: restoredDraft.selectedClipId ?? null,
-    selectedCanvasObjectId: restoredDraft.selectedCanvasObjectId ?? null,
-    uploadError: null,
-    isUploadingMedia: false,
-  } : initialState);
-  const [title, setTitle] = useState(restoredDraft?.title ?? 'My Video Draft');
+  const [state, setState] = useState<EditorState>(initialState);
+  const [title, setTitle] = useState('My Video Draft');
   const [waveformData, setWaveformData] = useState<Float32Array | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -99,6 +112,46 @@ export default function useVideoEditorController(): VideoEditorController {
 
   const set = useCallback((patch: Partial<EditorState>) => {
     setState((prev) => ({ ...prev, ...patch }));
+  }, []);
+
+  useEffect(() => {
+    const restoredDraft = loadEditorDraft();
+    if (!restoredDraft) return;
+
+    const restoredClips = (restoredDraft.timelineClips ?? []).map(fitClipToTimeline);
+    const restoredLayers = (restoredDraft.layers ?? []).map(clampLayerTiming);
+    const restoredDuration = Math.max(
+      calculateTimelineDuration(restoredClips),
+      calculateLayerTimelineDuration(restoredLayers)
+    );
+
+    setTitle(restoredDraft.title ?? 'My Video Draft');
+    setState({
+      ...initialState,
+      videoUrl: restoredDraft.videoUrl,
+      duration: restoredDuration,
+      currentTime: clampPlayhead(
+        Number.isFinite(restoredDraft.currentTime) ? restoredDraft.currentTime : 0,
+        restoredDuration
+      ),
+      trimStart: restoredDraft.trimStart ?? 0,
+      trimEnd: clampProjectDuration(restoredDraft.trimEnd || restoredDuration),
+      subtitles: restoredDraft.subtitles,
+      hasAudio: restoredDraft.hasAudio,
+      audioMuted: restoredDraft.audioMuted ?? false,
+      subtitleFontScale: restoredDraft.subtitleFontScale,
+      subtitleFontFamily: restoredDraft.subtitleFontFamily,
+      format: restoredDraft.format,
+      layers: restoredLayers,
+      mediaAssets: restoredDraft.mediaAssets ?? [],
+      textAssets: restoredDraft.textAssets?.length ? restoredDraft.textAssets : [DEFAULT_TEXT_ASSET],
+      timelineClips: restoredClips,
+      canvasObjects: (restoredDraft.canvasObjects ?? []).map(clampCanvasObjectRect),
+      selectedClipId: restoredDraft.selectedClipId ?? null,
+      selectedCanvasObjectId: restoredDraft.selectedCanvasObjectId ?? null,
+      uploadError: null,
+      isUploadingMedia: false,
+    });
   }, []);
 
   const playback = usePlaybackControllers(state, set, videoRef);
@@ -120,7 +173,7 @@ export default function useVideoEditorController(): VideoEditorController {
     return Math.max(calculateTimelineDuration(nextClips), calculateLayerTimelineDuration(nextLayers));
   }
 
-  function makeCanvasObject(asset: MediaAsset, clipId: string | null, drawOrder: number): CanvasObject {
+  function makeCanvasObject(asset: MediaAsset & { type: TimelineClipType }, clipId: string | null, drawOrder: number): CanvasObject {
     const canvasRatio = state.format === '9:16' ? 9 / 16 : state.format === '1:1' ? 1 : 16 / 9;
     const assetRatio = asset.width > 0 && asset.height > 0 ? asset.width / asset.height : canvasRatio;
     const width = assetRatio >= canvasRatio ? 72 : 42;
@@ -143,11 +196,32 @@ export default function useVideoEditorController(): VideoEditorController {
     };
   }
 
-  async function deployMediaFile(file: File, expectedType: 'video' | 'image') {
+  async function deployMediaFile(file: File, expectedType: MediaAssetType) {
     if (!file.type.startsWith(`${expectedType}/`)) {
       set({ uploadError: `Choose a valid ${expectedType} file.` });
       return;
     }
+    if (expectedType === 'video' || expectedType === 'audio') {
+      const localUrl = createBlobUrl(file);
+      try {
+        const duration = expectedType === 'video'
+          ? (await loadVideoMetadata(localUrl))?.duration
+          : await getMediaDuration(localUrl, 'audio');
+        if (!Number.isFinite(duration) || !duration || duration <= 0) {
+          set({ uploadError: `Could not read the selected ${expectedType} metadata.` });
+          return;
+        }
+        if (duration > MAX_TIMELINE_DURATION_SECONDS) {
+          set({
+            uploadError: `${expectedType === 'video' ? 'Video' : 'Audio'} is ${Math.ceil(duration)}s long. Maximum ${expectedType} length is ${formatDurationLimit()}.`,
+          });
+          return;
+        }
+      } finally {
+        revokeBlobUrl(localUrl);
+      }
+    }
+
     const temporaryId = crypto.randomUUID();
     const uploadingAsset: MediaAsset = {
       id: temporaryId,
@@ -156,7 +230,7 @@ export default function useVideoEditorController(): VideoEditorController {
       originalFileName: file.name,
       width: 0,
       height: 0,
-      duration: expectedType === 'video' ? 0 : undefined,
+      duration: expectedType === 'video' || expectedType === 'audio' ? 0 : undefined,
       status: 'uploading',
       createdAt: Date.now(),
       metadataLoaded: false,
@@ -170,24 +244,34 @@ export default function useVideoEditorController(): VideoEditorController {
 
     try {
       const uploaded = await uploadMediaFile(file);
-      const metadata = uploaded.type === 'video'
-        ? await loadVideoMetadata(uploaded.url)
-        : await loadImageMetadata(uploaded.url);
-
-      if (!metadata) {
-        throw new Error(
-          uploaded.type === 'video'
-            ? 'Could not read the deployed video metadata.'
-            : 'Could not read the deployed image dimensions.'
-        );
+      if (uploaded.type !== expectedType) {
+        throw new Error(`Uploaded file was not recognized as ${expectedType}.`);
       }
 
-      const duration =
-        uploaded.type === 'video' && 'duration' in metadata && typeof metadata.duration === 'number'
-          ? metadata.duration
-          : 5;
-      if (uploaded.type === 'video' && (!Number.isFinite(duration) || duration <= 0)) {
-        throw new Error('The uploaded video has no usable duration.');
+      let width = 0;
+      let height = 0;
+      let duration: number | undefined = uploaded.type === 'image' ? 5 : 0;
+
+      if (uploaded.type === 'video') {
+        const metadata = await loadVideoMetadata(uploaded.url);
+        if (!metadata) throw new Error('Could not read the deployed video metadata.');
+        width = metadata.width;
+        height = metadata.height;
+        duration = metadata.duration;
+      } else if (uploaded.type === 'image') {
+        const metadata = await loadImageMetadata(uploaded.url);
+        if (!metadata) throw new Error('Could not read the deployed image dimensions.');
+        width = metadata.width;
+        height = metadata.height;
+      } else {
+        duration = await getMediaDuration(uploaded.url, 'audio') ?? 0;
+      }
+
+      if ((uploaded.type === 'video' || uploaded.type === 'audio') && (!Number.isFinite(duration) || duration <= 0)) {
+        throw new Error(`The uploaded ${uploaded.type} has no usable duration.`);
+      }
+      if ((uploaded.type === 'video' || uploaded.type === 'audio') && duration > MAX_TIMELINE_DURATION_SECONDS) {
+        throw new Error(`${uploaded.type === 'video' ? 'Video' : 'Audio'} is ${Math.ceil(duration)}s long. Maximum ${uploaded.type} length is ${formatDurationLimit()}.`);
       }
 
       setState((prev) => {
@@ -196,8 +280,8 @@ export default function useVideoEditorController(): VideoEditorController {
           type: uploaded.type,
           url: uploaded.url,
           originalFileName: uploaded.originalFileName,
-          width: metadata.width,
-          height: metadata.height,
+          width,
+          height,
           duration,
           status: 'deployed',
           createdAt: Date.now(),
@@ -237,7 +321,11 @@ export default function useVideoEditorController(): VideoEditorController {
     void deployMediaFile(file, 'image');
   }
 
-function handlePlaceAsset(assetId: string) {
+  function handleAudioUpload(file: File) {
+    void deployMediaFile(file, 'audio');
+  }
+
+  function handlePlaceAsset(assetId: string) {
     const asset = state.mediaAssets.find((item) => item.id === assetId && item.status === 'deployed' && item.metadataLoaded);
     if (!asset) return;
     const duration = asset.type === 'video' ? asset.duration ?? 0 : asset.duration ?? 5;
@@ -245,12 +333,42 @@ function handlePlaceAsset(assetId: string) {
       set({ uploadError: 'This asset has no usable duration.' });
       return;
     }
+    if ((asset.type === 'video' || asset.type === 'audio') && duration > MAX_TIMELINE_DURATION_SECONDS) {
+      set({
+        uploadError: `${asset.type === 'video' ? 'Video' : 'Audio'} is ${Math.ceil(duration)}s long. Maximum ${asset.type} length is ${formatDurationLimit()}.`,
+      });
+      return;
+    }
+    if (asset.type === 'audio') {
+      const newLayer = createDefaultLayer('audio', state.layers.length);
+      const nextLayer = clampLayerTiming({
+        ...newLayer,
+        assetId: asset.id,
+        name: asset.originalFileName,
+        src: asset.url,
+        endTime: duration,
+      });
+      const nextLayers = [...state.layers, nextLayer];
+      const timelineDuration = calculateProjectDuration(state.timelineClips, nextLayers);
+      set({
+        layers: nextLayers,
+        selectedLayerId: nextLayer.id,
+        selectedClipId: null,
+        selectedCanvasObjectId: null,
+        duration: timelineDuration,
+        currentTime: nextLayer.startTime,
+        hasAudio: true,
+        uploadError: null,
+      });
+      return;
+    }
+    if (!isVisualMediaAsset(asset)) return;
     const clipId = crypto.randomUUID();
     const object = makeCanvasObject(asset, clipId, state.canvasObjects.length + state.layers.length + 1);
-    const clipDuration = asset.type === 'video' ? duration : Math.max(1, duration);
+    const clipDuration = Math.min(asset.type === 'video' ? duration : Math.max(1, duration), MAX_TIMELINE_DURATION_SECONDS);
     const nextTimelineStart = 0;
     const sourceEnd = asset.type === 'image' ? clipDuration : duration;
-    const clip: TimelineClip = {
+    const clip: TimelineClip = fitClipToTimeline({
       id: clipId,
       assetId: asset.id,
       canvasObjectId: object.id,
@@ -262,7 +380,7 @@ function handlePlaceAsset(assetId: string) {
       muted: asset.type === 'video' ? false : true,
       volume: 1,
       selected: true,
-    };
+    });
     const clips = [...state.timelineClips.map((item) => ({ ...item, selected: false })), clip];
     const timelineDuration = calculateProjectDuration(clips);
     set({
@@ -282,7 +400,64 @@ function handlePlaceAsset(assetId: string) {
     }
   }
 
+  function handlePlaceTextAsset(assetId: string) {
+    const asset = state.textAssets.find((item) => item.id === assetId);
+    if (!asset) return;
+
+    const nextLayer = clampLayerTiming(createLayerFromTextAsset(asset, state.layers.length));
+    const nextLayers = [...state.layers, nextLayer];
+    const timelineDuration = calculateProjectDuration(state.timelineClips, nextLayers);
+    set({
+      layers: nextLayers,
+      selectedLayerId: nextLayer.id,
+      selectedClipId: null,
+      selectedCanvasObjectId: null,
+      duration: timelineDuration,
+      currentTime: nextLayer.startTime,
+      uploadError: null,
+    });
+  }
+
+  function handleDeleteTextAsset(id: string) {
+    const usedInTimeline = state.layers.some((layer) => layer.type === 'text' && layer.assetId === id);
+
+    if (usedInTimeline) {
+      set({ uploadError: 'Remove this text from the timeline first, then delete it from the sidebar.' });
+      return;
+    }
+
+    set({
+      textAssets: state.textAssets.filter((asset) => asset.id !== id),
+      uploadError: null,
+    });
+  }
+
+  function handleDeleteAsset(id: string) {
+    const usedInTimeline =
+      state.timelineClips.some((clip) => clip.assetId === id) ||
+      state.layers.some((layer) => layer.assetId === id);
+
+    if (usedInTimeline) {
+      set({ uploadError: 'Remove this media from the timeline first, then delete it from the sidebar.' });
+      return;
+    }
+
+    set({
+      mediaAssets: state.mediaAssets.filter((asset) => asset.id !== id),
+      uploadError: null,
+    });
+  }
+
   function handleAddLayer(type: LayerType) {
+    if (type === 'text') {
+      const textAsset = createDefaultTextAsset(state.textAssets.length);
+      set({
+        textAssets: [...state.textAssets, textAsset],
+        uploadError: null,
+      });
+      return;
+    }
+
     const newLayer = createDefaultLayer(type, state.layers.length);
     set({
       layers: [...state.layers, newLayer],
@@ -306,30 +481,27 @@ function handlePlaceAsset(assetId: string) {
   }
 
   function handleUpdateCanvasObject(object: CanvasObject) {
-    const safeObject = {
-      ...object,
-      x: Number.isFinite(object.x) ? object.x : 0,
-      y: Number.isFinite(object.y) ? object.y : 0,
-      width: Number.isFinite(object.width) ? Math.max(1, object.width) : 10,
-      height: Number.isFinite(object.height) ? Math.max(1, object.height) : 10,
-    };
+    const safeObject = clampCanvasObjectRect(object);
     set({
       canvasObjects: state.canvasObjects.map((item) => (item.id === safeObject.id ? safeObject : item)),
     });
   }
 
   function commitClips(nextClips: TimelineClip[], patch: Partial<EditorState> = {}) {
-    const timelineDuration = calculateProjectDuration(nextClips);
+    const safeClips = nextClips.map(fitClipToTimeline);
+    const timelineDuration = calculateProjectDuration(safeClips);
     set({
       ...patch,
-      timelineClips: nextClips,
+      timelineClips: safeClips,
       duration: timelineDuration,
       currentTime: clampPlayhead(state.currentTime, timelineDuration),
     });
   }
 
   function handleMoveClip(id: string, timelineStart: number) {
-    const nextClips = state.timelineClips.map((clip) => (clip.id === id ? moveClip(clip, timelineStart) : clip));
+    const nextClips = state.timelineClips.map((clip) =>
+      clip.id === id ? fitClipToTimeline(moveClip(clip, clampTimelineStartForDuration(timelineStart, clip.duration))) : clip
+    );
     commitClips(nextClips);
   }
 
@@ -354,6 +526,52 @@ function handlePlaceAsset(assetId: string) {
     });
   }
 
+  function handleSplitClip(id: string) {
+    const target = state.timelineClips.find((clip) => clip.id === id);
+    if (!target) return;
+
+    if (!canSplitClip(target)) {
+      set({ uploadError: 'This video clip must be at least 6s long to split into two 3s parts.' });
+      return;
+    }
+
+    const sourceObject = state.canvasObjects.find((object) => object.id === target.canvasObjectId);
+    if (!sourceObject) {
+      set({ uploadError: 'Could not find the canvas object for this clip.' });
+      return;
+    }
+
+    const secondClipId = crypto.randomUUID();
+    const secondCanvasObjectId = target.canvasObjectId;
+    const splitClips = splitClipAtMidpoint(target, secondClipId, secondCanvasObjectId);
+    if (!splitClips) {
+      set({ uploadError: 'This video clip is too short to split.' });
+      return;
+    }
+
+    const [firstClip, secondClip] = splitClips;
+    const nextClips = state.timelineClips.flatMap((clip) => {
+      if (clip.id !== id) return { ...clip, selected: false };
+      return [firstClip, secondClip];
+    });
+    const nextObjects = state.canvasObjects.map((object) => ({
+      ...object,
+      selected: object.id === sourceObject.id,
+    }));
+    const timelineDuration = calculateProjectDuration(nextClips);
+
+    set({
+      timelineClips: nextClips.map(fitClipToTimeline),
+      canvasObjects: nextObjects,
+      selectedClipId: secondClipId,
+      selectedCanvasObjectId: sourceObject.id,
+      selectedLayerId: null,
+      duration: timelineDuration,
+      currentTime: secondClip.timelineStart,
+      uploadError: null,
+    });
+  }
+
   function handleToggleClipMute(id: string) {
     set({
       timelineClips: state.timelineClips.map((clip) => (clip.id === id ? { ...clip, muted: !clip.muted } : clip)),
@@ -363,14 +581,27 @@ function handlePlaceAsset(assetId: string) {
   function handleDeleteClip(id: string) {
     const target = state.timelineClips.find((clip) => clip.id === id);
     const nextClips = state.timelineClips.filter((clip) => clip.id !== id);
+    const siblingClip = target ? nextClips.find((clip) => clip.canvasObjectId === target.canvasObjectId) : null;
     const timelineDuration = calculateProjectDuration(nextClips);
+    const nextSelectedClipId = state.selectedClipId === id ? siblingClip?.id ?? null : state.selectedClipId;
+    const nextSelectedCanvasObjectId = state.selectedClipId === id && target && siblingClip
+      ? target.canvasObjectId
+      : target?.canvasObjectId === state.selectedCanvasObjectId && !siblingClip
+        ? null
+        : state.selectedCanvasObjectId;
     set({
       timelineClips: nextClips,
       canvasObjects: target
-        ? state.canvasObjects.filter((object) => object.id !== target.canvasObjectId)
+        ? state.canvasObjects
+          .filter((object) => object.id !== target.canvasObjectId || Boolean(siblingClip))
+          .map((object) => (
+            object.id === target.canvasObjectId && siblingClip
+              ? { ...object, clipId: siblingClip.id, selected: object.id === nextSelectedCanvasObjectId }
+              : object
+          ))
         : state.canvasObjects,
-      selectedClipId: state.selectedClipId === id ? null : state.selectedClipId,
-      selectedCanvasObjectId: target?.canvasObjectId === state.selectedCanvasObjectId ? null : state.selectedCanvasObjectId,
+      selectedClipId: nextSelectedClipId,
+      selectedCanvasObjectId: nextSelectedCanvasObjectId,
       duration: timelineDuration,
       currentTime: clampPlayhead(state.currentTime, timelineDuration),
       isPlaying: timelineDuration > 0 ? state.isPlaying : false,
@@ -411,7 +642,11 @@ function handlePlaceAsset(assetId: string) {
     set,
     handleVideoUpload,
     handleImageUpload,
+    handleAudioUpload,
     handlePlaceAsset,
+    handleDeleteAsset,
+    handlePlaceTextAsset,
+    handleDeleteTextAsset,
     handlePlayPause: playback.handlePlayPause,
     handleTimeUpdate: playback.handleTimeUpdate,
     handleDurationChange: playback.handleDurationChange,
@@ -429,6 +664,7 @@ function handlePlaceAsset(assetId: string) {
     handleUpdateCanvasObject,
     handleMoveClip,
     handleTrimClip,
+    handleSplitClip,
     handleClipOrderChange,
     handleToggleClipMute,
     handleDeleteClip,

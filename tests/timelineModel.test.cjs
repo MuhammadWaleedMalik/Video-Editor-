@@ -26,14 +26,19 @@ sandbox.exports = sandbox.module.exports;
 vm.runInNewContext(transpiled, sandbox, { filename: sourcePath });
 
 const {
+  MAX_TIMELINE_DURATION_SECONDS,
+  clampLayerTiming,
   calculateTimelineDuration,
+  canSplitClip,
   clampPlayhead,
+  fitClipToTimeline,
   getRenderableClips,
   getTimelineStackItems,
   moveClip,
   reorderTimelineStack,
   resizeImageClipEnd,
   sourceTimeForClip,
+  splitClipAtMidpoint,
   trimClipEnd,
   trimClipStart,
 } = sandbox.module.exports;
@@ -96,6 +101,16 @@ assert.equal(calculateTimelineDuration([clip({ duration: 40 }), clip({ id: 'clip
 assert.equal(calculateTimelineDuration([clip({ duration: 40 }), clip({ id: 'clip-b', timelineStart: 30, duration: 20 })]), 50);
 assert.equal(calculateTimelineDuration([]), 0);
 assert.equal(calculateTimelineDuration([clip({ duration: 20 })]), 20);
+assert.equal(MAX_TIMELINE_DURATION_SECONDS, 180);
+assert.equal(calculateTimelineDuration([clip({ timelineStart: 170, duration: 20 })]), 180);
+assert.deepEqual(
+  { ...fitClipToTimeline(clip({ timelineStart: 170, sourceStart: 5, sourceEnd: 25, duration: 20 })) },
+  clip({ timelineStart: 170, sourceStart: 5, sourceEnd: 15, duration: 10 })
+);
+assert.deepEqual(
+  { ...clampLayerTiming(layer({ startTime: 179, endTime: 220 })) },
+  layer({ startTime: 179, endTime: 180 })
+);
 
 const trimmedEnd = trimClipEnd(clip(), 25);
 assert.equal(trimmedEnd.sourceEnd, 25);
@@ -143,6 +158,48 @@ const imageDurationTwenty = resizeImageClipEnd(imageDurationTen, 20);
 assert.equal(imageDurationTwenty.sourceEnd, 20);
 assert.equal(imageDurationTwenty.duration, 20);
 assert.equal(resizeImageClipEnd(imageDurationTwenty, 0).duration, 1);
+
+assert.equal(canSplitClip(clip({ duration: 6, sourceEnd: 6 })), true);
+assert.equal(canSplitClip(clip({ duration: 5.99, sourceEnd: 5.99 })), false);
+assert.equal(canSplitClip(clip({ type: 'image', duration: 20, sourceEnd: 20 })), false);
+const splitWindow = splitClipAtMidpoint(
+  clip({ timelineStart: 12, sourceStart: 4, sourceEnd: 14, duration: 10, selected: true }),
+  'clip-b',
+  'object-a'
+);
+assert.ok(splitWindow);
+assert.deepEqual(
+  [...splitWindow.map((item) => ({
+    id: item.id,
+    object: item.canvasObjectId,
+    timelineStart: item.timelineStart,
+    sourceStart: item.sourceStart,
+    sourceEnd: item.sourceEnd,
+    duration: item.duration,
+    selected: item.selected,
+  }))],
+  [
+    {
+      id: 'clip-a',
+      object: 'object-a',
+      timelineStart: 12,
+      sourceStart: 4,
+      sourceEnd: 9,
+      duration: 5,
+      selected: false,
+    },
+    {
+      id: 'clip-b',
+      object: 'object-a',
+      timelineStart: 17,
+      sourceStart: 9,
+      sourceEnd: 14,
+      duration: 5,
+      selected: true,
+    },
+  ]
+);
+assert.equal(splitClipAtMidpoint(clip({ duration: 5, sourceEnd: 5 }), 'short', 'short-object'), null);
 
 const clipA = clip({ id: 'a', assetId: 'same', muted: true });
 const clipB = clip({ id: 'b', assetId: 'same', muted: false });

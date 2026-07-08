@@ -16,6 +16,7 @@ export default function ImportedVideoPage() {
 
   const trimStart = draft?.trimStart ?? 0;
   const trimEnd = draft?.trimEnd || draft?.duration || 0;
+  const isRenderedPreview = draft?.videoSourceHint === 'rendered-preview';
   const activeSub = useMemo(
     () => draft?.subtitles.find((chunk) => currentTime >= chunk.startTime && currentTime <= chunk.endTime) ?? null,
     [currentTime, draft]
@@ -67,12 +68,13 @@ export default function ImportedVideoPage() {
 
   if (!draft?.videoUrl) {
     return (
-      <main className="flex h-[100svh] items-center justify-center bg-[#1a0c05] p-6 text-center supports-[height:100dvh]:h-[100dvh]">
+      <main className="flex min-h-[100svh] items-center justify-center bg-[#1a0c05] p-6 text-center supports-[min-height:100dvh]:min-h-[100dvh]">
         <div className="max-w-sm rounded-xl border border-[#3d2510] bg-[#120a02] p-6">
           <p className="text-sm font-semibold text-[#e8d5a0]">No imported video found.</p>
           <button
+            type="button"
             onClick={() => router.push('/')}
-            className="mt-4 rounded-lg bg-[#c9b600] px-4 py-2 text-sm font-semibold text-[#1a0c05]"
+            className="mt-4 min-h-11 rounded-lg bg-[#c9b600] px-4 py-2 text-sm font-semibold text-[#1a0c05]"
           >
             Back to editor
           </button>
@@ -82,18 +84,21 @@ export default function ImportedVideoPage() {
   }
 
   return (
-    <main className="flex h-[100svh] flex-col overflow-hidden bg-[#1a0c05] text-[#c8b88a] supports-[height:100dvh]:h-[100dvh]">
-      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#3d2510] bg-[#120a02] px-4 py-3">
+    <main className="flex min-h-[100svh] flex-col overflow-y-auto bg-[#1a0c05] text-[#c8b88a] supports-[min-height:100dvh]:min-h-[100dvh]">
+      <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#3d2510] bg-[#120a02] px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top))]">
         <div>
           <h1 className="text-sm font-bold text-[#e8d5a0]">{draft.title}</h1>
           <p className="text-[11px] text-[#7a6040]">
-            Trimmed {formatTime(trimStart)} - {formatTime(trimEnd)}
+            {isRenderedPreview
+              ? `Completed canvas preview ${formatTime(trimStart)} - ${formatTime(trimEnd)}`
+              : `Trimmed ${formatTime(trimStart)} - ${formatTime(trimEnd)}`}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <button
+            type="button"
             onClick={() => router.push('/')}
-            className="flex items-center gap-2 rounded-lg border border-[#3d2510] px-3 py-2 text-xs font-semibold hover:border-[#c9b600]"
+            className="flex min-h-11 items-center gap-2 rounded-lg border border-[#3d2510] px-3 py-2 text-xs font-semibold hover:border-[#c9b600]"
           >
             <ArrowLeft size={14} />
             Edit
@@ -101,14 +106,15 @@ export default function ImportedVideoPage() {
           <a
             href={draft.videoUrl}
             download={draft.videoFileName ?? 'edited-video.webm'}
-            className="flex items-center gap-2 rounded-lg bg-[#c9b600] px-3 py-2 text-xs font-semibold text-[#1a0c05] hover:bg-[#e0cc00]"
+            className="flex min-h-11 items-center gap-2 rounded-lg bg-[#c9b600] px-3 py-2 text-xs font-semibold text-[#1a0c05] hover:bg-[#e0cc00]"
           >
             <Download size={14} />
             Download
           </a>
           <button
+            type="button"
             onClick={deleteVideo}
-            className="flex items-center gap-2 rounded-lg border border-red-900/60 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-950/40"
+            className="flex min-h-11 items-center gap-2 rounded-lg border border-red-900/60 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-950/40"
           >
             <Trash2 size={14} />
             Delete
@@ -116,10 +122,10 @@ export default function ImportedVideoPage() {
         </div>
       </header>
 
-      <section className="flex min-h-0 flex-1 items-center justify-center p-4">
+      <section className="flex min-h-[320px] flex-1 items-center justify-center p-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:p-4">
         <div
           className="relative w-full max-w-5xl overflow-hidden rounded-xl bg-black shadow-2xl"
-          style={{ aspectRatio: FORMAT_RATIO[draft.format], maxHeight: 'calc(100svh - 130px)' }}
+          style={{ aspectRatio: FORMAT_RATIO[draft.format], maxHeight: 'calc(100svh - 150px)' }}
         >
           <PreviewCanvas
             format={draft.format}
@@ -130,7 +136,7 @@ export default function ImportedVideoPage() {
             playing={playing}
             subtitleFontFamily={draft.subtitleFontFamily}
             subtitleFontScale={draft.subtitleFontScale}
-            layers={draft.layers}
+            layers={isRenderedPreview ? [] : draft.layers}
             onRefReady={setVideoRef}
             onTimeUpdate={handleTimeUpdate}
             onEnded={() => setPlaying(false)}

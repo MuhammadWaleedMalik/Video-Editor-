@@ -79,6 +79,12 @@ export default function PreviewModal({
   useEffect(() => setMuted(audioMuted), [audioMuted]);
 
   useEffect(() => {
+    return () => {
+      videoRef?.pause();
+    };
+  }, [videoRef]);
+
+  useEffect(() => {
     function onKey(event: KeyboardEvent) {
       if (event.key === 'Escape') onClose();
       if (event.key === ' ') {
@@ -140,21 +146,22 @@ export default function PreviewModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-2 backdrop-blur-sm sm:p-4"
+      className="fixed inset-0 z-50 flex h-[100svh] items-start justify-center overflow-y-auto bg-black/85 p-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] pt-[calc(0.5rem+env(safe-area-inset-top))] backdrop-blur-sm supports-[height:100dvh]:h-[100dvh] sm:items-center sm:p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative flex max-h-[92svh] w-[98vw] max-w-[980px] flex-col overflow-hidden rounded-2xl border border-[#3d2510] bg-[#120a02] shadow-2xl supports-[height:100dvh]:max-h-[92dvh] sm:w-[92vw]">
-        <header className="flex items-center justify-between px-4 py-3 border-b border-[#3d2510] shrink-0">
+      <div className="relative my-auto flex max-h-[calc(100svh-1rem)] w-full max-w-[980px] flex-col overflow-hidden rounded-2xl border border-[#3d2510] bg-[#120a02] shadow-2xl supports-[height:100dvh]:max-h-[calc(100dvh-1rem)] sm:w-[92vw]">
+        <header className="flex shrink-0 items-center justify-between border-b border-[#3d2510] px-4 py-3">
           <div className="flex items-center gap-2">
             <Maximize2 size={14} className="text-[#7a6040]" />
             <span className="text-[#c8b88a] text-sm font-semibold">Preview</span>
             <span className="text-[10px] px-2 py-0.5 rounded border border-[#3d2510] text-[#7a6040]">{format}</span>
           </div>
           <button
+            type="button"
             onClick={onClose}
-            className="w-7 h-7 rounded-lg flex items-center justify-center text-[#7a6040] hover:text-[#e8d5a0] hover:bg-[#2d1a08] transition-colors"
+            className="flex h-11 w-11 items-center justify-center rounded-lg text-[#7a6040] transition-colors hover:bg-[#2d1a08] hover:text-[#e8d5a0]"
           >
             <X size={15} />
           </button>
@@ -162,7 +169,7 @@ export default function PreviewModal({
 
         <div
           className="relative w-full shrink overflow-hidden bg-black"
-          style={{ aspectRatio: FORMAT_RATIO[format], maxHeight: 'calc(92svh - 126px)' }}
+          style={{ aspectRatio: FORMAT_RATIO[format], maxHeight: 'calc(100svh - 172px)' }}
         >
           <PreviewCanvas
             format={format}

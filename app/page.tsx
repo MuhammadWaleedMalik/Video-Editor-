@@ -1,5 +1,5 @@
-import VideoEditor from '@/components/video-editor';
+import VideoEditorClient from '@/components/video-editor/VideoEditorClient';
 
 export default function Home() {
-  return <VideoEditor />;
+  return <VideoEditorClient />;
 }

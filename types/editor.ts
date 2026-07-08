@@ -10,9 +10,23 @@ export type SubtitleChunk = {
 };
 
 export type LayerType = 'image' | 'video' | 'text' | 'audio';
-export type MediaAssetType = 'video' | 'image';
+export type MediaAssetType = 'video' | 'image' | 'audio';
+export type TimelineClipType = 'video' | 'image';
 export type MediaAssetStatus = 'uploading' | 'deployed' | 'failed';
 export type CanvasObjectType = 'video' | 'image' | 'text' | 'shape';
+
+export interface TextAsset {
+  id: string;
+  type: 'text';
+  name: string;
+  text: string;
+  fontSize: number;
+  fontFamily: string;
+  color: string;
+  bgColor: string;
+  themeId?: string;
+  createdAt: number;
+}
 
 export interface MediaAsset {
   id: string;
@@ -32,7 +46,7 @@ export interface TimelineClip {
   id: string;
   assetId: string;
   canvasObjectId: string;
-  type: MediaAssetType;
+  type: TimelineClipType;
   timelineStart: number;
   sourceStart: number;
   sourceEnd: number;
@@ -63,6 +77,7 @@ export interface CanvasObject {
 
 export interface Layer {
   id: string;
+  assetId?: string;
   type: LayerType;
   x: number;          // percent (0-100)
   y: number;          // percent (0-100)
@@ -100,6 +115,7 @@ export interface EditorState {
   layers: Layer[];
   selectedLayerId: string | null;
   mediaAssets: MediaAsset[];
+  textAssets: TextAsset[];
   timelineClips: TimelineClip[];
   canvasObjects: CanvasObject[];
   selectedClipId: string | null;
