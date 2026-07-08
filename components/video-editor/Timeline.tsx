@@ -1,32 +1,35 @@
 'use client';
 
-import { useRef, useCallback, useEffect } from 'react';
-import { Layer, SubtitleChunk } from '@/types/editor';
-import { drawWaveform } from './timelineUtils';
+import { useRef, useCallback, useEffect, useMemo, useState } from 'react';
+import { CanvasObject, Layer, MediaAsset, TimelineClip } from '@/types/editor';
+import { getTimelineStackItems } from './timelineModel';
 import TimelineRows from './TimelineRows';
 
 interface TimelineProps {
   duration: number;
   currentTime: number;
-  trimStart: number;
-  trimEnd: number;
-  subtitles: SubtitleChunk[];
   layers: Layer[];
   selectedLayerId: string | null;
-  hasAudio: boolean;
-  audioMuted: boolean;
-  waveformData: Float32Array | null;
   onSeek: (time: number) => void;
-  onTrimChange: (start: number, end: number) => void;
-  onAudioMuteToggle: () => void;
-  onAudioRemove: () => void;
   onSelectLayer: (id: string | null) => void;
+  onDeleteLayer: (id: string) => void;
   onLayerTimingChange: (id: string, startTime: number, endTime: number) => void;
-  onLayerOrderChange: (id: string, direction: 'front' | 'back') => void;
+  onLayerStackOrderChange: (id: string, targetIndex: number) => void;
+  mediaAssets: MediaAsset[];
+  timelineClips: TimelineClip[];
+  canvasObjects: CanvasObject[];
+  selectedClipId: string | null;
+  onSelectClip: (id: string | null) => void;
+  onMoveClip: (id: string, timelineStart: number) => void;
+  onTrimClip: (id: string, edge: 'start' | 'end', sourceTime: number) => void;
+  onClipOrderChange: (id: string, targetIndex: number) => void;
+  onToggleClipMute: (id: string) => void;
+  onDeleteClip: (id: string) => void;
 }
 
-type DragTarget = 'playhead' | 'trim-start' | 'trim-end' | null;
-type LayerDragMode = 'move' | 'start' | 'end';
+type DragTarget = 'playhead' | null;
+type LayerDragMode = 'move' | 'start' | 'end' | 'z';
+type ClipDragMode = 'move' | 'start' | 'end' | 'z';
 type LayerDragState = {
   id: string;
   mode: LayerDragMode;
@@ -34,65 +37,94 @@ type LayerDragState = {
   originalStart: number;
   originalEnd: number;
 };
+type ClipDragState = {
+  id: string;
+  mode: ClipDragMode;
+  startClientX: number;
+  originalStart: number;
+  originalEnd: number;
+  originalSourceStart: number;
+  originalSourceEnd: number;
+};
+type StackDragPreview =
+  | { kind: 'clip'; id: string; targetIndex: number }
+  | { kind: 'layer'; id: string; targetIndex: number }
+  | null;
 
 export default function Timeline({
   duration,
   currentTime,
-  trimStart,
-  trimEnd,
-  subtitles,
   layers,
   selectedLayerId,
-  hasAudio,
-  audioMuted,
-  waveformData,
   onSeek,
-  onTrimChange,
-  onAudioMuteToggle,
-  onAudioRemove,
   onSelectLayer,
+  onDeleteLayer,
   onLayerTimingChange,
-  onLayerOrderChange,
+  onLayerStackOrderChange,
+  mediaAssets,
+  timelineClips,
+  canvasObjects,
+  selectedClipId,
+  onSelectClip,
+  onMoveClip,
+  onTrimClip,
+  onClipOrderChange,
+  onToggleClipMute,
+  onDeleteClip,
 }: TimelineProps) {
   const trackAreaRef = useRef<HTMLDivElement>(null);
-  const audioCanvasRef = useRef<HTMLCanvasElement>(null);
+  const timelineLaneRef = useRef<HTMLDivElement>(null);
   const dragging = useRef<DragTarget>(null);
   const layerDragging = useRef<LayerDragState | null>(null);
+  const clipDragging = useRef<ClipDragState | null>(null);
+  const activePointerId = useRef<number | null>(null);
+  const [stackDragPreview, setStackDragPreview] = useState<StackDragPreview>(null);
 
-  const dur = duration || 1;
-  const timelineWidth = Math.min(2400, Math.max(300, Math.round(dur * 24)));
+  const dur = duration > 0 ? duration : 1;
+  const timelineWidth = 0;
+  const stackItems = useMemo(
+    () => getTimelineStackItems(layers, timelineClips, canvasObjects),
+    [canvasObjects, layers, timelineClips]
+  );
   const timeToPercent = useCallback((t: number) => `${(t / dur) * 100}%`, [dur]);
 
-  const getTimeFromX = useCallback((clientX: number): number => {
-    const track = trackAreaRef.current;
-    if (!track) return 0;
-    const rect = track.getBoundingClientRect();
-    const scrollX = clientX - rect.left + track.scrollLeft;
-    return Math.max(0, Math.min(dur, (scrollX / Math.max(1, track.scrollWidth)) * dur));
-  }, [dur]);
+  const getTimeFromX = useCallback(
+    (clientX: number): number => {
+      const timelineLane = timelineLaneRef.current;
+      const track = trackAreaRef.current;
+      const rect = timelineLane?.getBoundingClientRect() ?? track?.getBoundingClientRect();
+      if (!rect) return 0;
+      const x = clientX - rect.left;
+      return Math.max(0, Math.min(dur, (x / Math.max(1, rect.width)) * dur));
+    },
+    [dur]
+  );
 
-  useEffect(() => {
-    const canvas = audioCanvasRef.current;
-    if (!canvas || !waveformData) return;
-    const rect = canvas.getBoundingClientRect();
-    if (rect.width > 0 && rect.height > 0) {
-      canvas.width = rect.width * window.devicePixelRatio;
-      canvas.height = rect.height * window.devicePixelRatio;
-      const ctx = canvas.getContext('2d');
-      if (ctx) ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
-    }
-    drawWaveform(canvas, waveformData, currentTime, dur, audioMuted);
-  }, [waveformData, currentTime, dur, audioMuted]);
+  const startPlayheadDrag = useCallback((clientX: number) => {
+    dragging.current = 'playhead';
+    onSeek(getTimeFromX(clientX));
+  }, [getTimeFromX, onSeek]);
 
-  const onMouseDown = (e: React.MouseEvent, target: 'playhead' | 'trim-start' | 'trim-end') => {
+  const onPointerDown = useCallback((e: React.PointerEvent, target: 'playhead') => {
+    if (!e.isPrimary) return;
     e.preventDefault();
-    dragging.current = target;
-    if (target === 'playhead') onSeek(getTimeFromX(e.clientX));
-  };
+    activePointerId.current = e.pointerId;
+    if (target === 'playhead') startPlayheadDrag(e.clientX);
+  }, [startPlayheadDrag]);
 
-  const onLayerMouseDown = (e: React.MouseEvent, layer: Layer, mode: LayerDragMode) => {
+  const onPlayheadPointerDown = useCallback((e: React.PointerEvent) => {
+    if (!e.isPrimary) return;
     e.preventDefault();
     e.stopPropagation();
+    activePointerId.current = e.pointerId;
+    startPlayheadDrag(e.clientX);
+  }, [startPlayheadDrag]);
+
+  const onLayerPointerDown = useCallback((e: React.PointerEvent, layer: Layer, mode: LayerDragMode) => {
+    if (!e.isPrimary) return;
+    e.preventDefault();
+    e.stopPropagation();
+    activePointerId.current = e.pointerId;
     onSelectLayer(layer.id);
     layerDragging.current = {
       id: layer.id,
@@ -101,27 +133,99 @@ export default function Timeline({
       originalStart: layer.startTime,
       originalEnd: layer.endTime,
     };
-  };
+    if (mode === 'z') {
+      const layerIndex = stackItems.findIndex((item) => item.kind === 'layer' && item.id === layer.id);
+      setStackDragPreview(layerIndex === -1 ? null : { kind: 'layer', id: layer.id, targetIndex: layerIndex });
+    }
+  }, [onSelectLayer, stackItems]);
 
-  const onMouseMove = (e: React.MouseEvent) => {
+  const onClipPointerDown = useCallback((e: React.PointerEvent, clip: TimelineClip, mode: ClipDragMode) => {
+    if (!e.isPrimary) return;
+    e.preventDefault();
+    e.stopPropagation();
+    activePointerId.current = e.pointerId;
+    onSelectClip(clip.id);
+    clipDragging.current = {
+      id: clip.id,
+      mode,
+      startClientX: e.clientX,
+      originalStart: clip.timelineStart,
+      originalEnd: clip.timelineStart + clip.duration,
+      originalSourceStart: clip.sourceStart,
+      originalSourceEnd: clip.sourceEnd,
+    };
+    if (mode === 'z') {
+      const clipIndex = stackItems.findIndex((item) => item.kind === 'clip' && item.id === clip.id);
+      setStackDragPreview(clipIndex === -1 ? null : { kind: 'clip', id: clip.id, targetIndex: clipIndex });
+    }
+  }, [onSelectClip, stackItems]);
+
+  const handlePointerMove = useCallback((clientX: number, clientY: number) => {
+    if (clipDragging.current) {
+      const drag = clipDragging.current;
+      const track = trackAreaRef.current;
+      if (!track) return;
+      const timingRect = timelineLaneRef.current?.getBoundingClientRect() ?? track.getBoundingClientRect();
+      const totalWidth = Math.max(1, timingRect.width);
+      const deltaX = ((clientX - drag.startClientX) / totalWidth) * dur;
+
+      if (drag.mode === 'move') {
+        const length = drag.originalEnd - drag.originalStart;
+        onMoveClip(drag.id, Math.max(0, drag.originalStart + deltaX));
+      } else if (drag.mode === 'start') {
+        onTrimClip(drag.id, 'start', drag.originalSourceStart + deltaX);
+      } else if (drag.mode === 'end') {
+        onTrimClip(drag.id, 'end', drag.originalSourceEnd + deltaX);
+      } else if (drag.mode === 'z') {
+        const clipIndex = stackItems.findIndex((item) => item.kind === 'clip' && item.id === drag.id);
+        if (clipIndex === -1) return;
+        const rowTop = 10;
+        const rowHeight = 118;
+        const rect = track.getBoundingClientRect();
+        const row = Math.floor((clientY - rect.top + track.scrollTop - rowTop) / rowHeight);
+        const targetIndex = Math.max(0, Math.min(stackItems.length - 1, row));
+        setStackDragPreview({ kind: 'clip', id: drag.id, targetIndex });
+        if (targetIndex !== clipIndex) {
+          onClipOrderChange(drag.id, targetIndex);
+        }
+      }
+      return;
+    }
+
     if (layerDragging.current) {
       const drag = layerDragging.current;
       const track = trackAreaRef.current;
       if (!track) return;
-      const totalWidth = Math.max(1, track.scrollWidth);
-      const delta = ((e.clientX - drag.startClientX) / totalWidth) * dur;
+      const timingRect = timelineLaneRef.current?.getBoundingClientRect() ?? track.getBoundingClientRect();
+      const totalWidth = Math.max(1, timingRect.width);
+      const delta = ((clientX - drag.startClientX) / totalWidth) * dur;
       const minLength = Math.min(0.5, Math.max(0.1, dur / 20));
       let nextStart = drag.originalStart;
       let nextEnd = drag.originalEnd;
 
+      if (drag.mode === 'z') {
+        const layerIndex = stackItems.findIndex((item) => item.kind === 'layer' && item.id === drag.id);
+        if (layerIndex === -1) return;
+        const rowTop = 10;
+        const rowHeight = 118;
+        const rect = track.getBoundingClientRect();
+        const row = Math.floor((clientY - rect.top + track.scrollTop - rowTop) / rowHeight);
+        const targetIndex = Math.max(0, Math.min(stackItems.length - 1, row));
+        setStackDragPreview({ kind: 'layer', id: drag.id, targetIndex });
+        if (targetIndex !== layerIndex) {
+          onLayerStackOrderChange(drag.id, targetIndex);
+        }
+        return;
+      }
+
       if (drag.mode === 'move') {
         const length = drag.originalEnd - drag.originalStart;
-        nextStart = Math.max(0, Math.min(dur - length, drag.originalStart + delta));
+        nextStart = Math.max(0, drag.originalStart + delta);
         nextEnd = nextStart + length;
       } else if (drag.mode === 'start') {
         nextStart = Math.max(0, Math.min(drag.originalEnd - minLength, drag.originalStart + delta));
       } else {
-        nextEnd = Math.min(dur, Math.max(drag.originalStart + minLength, drag.originalEnd + delta));
+        nextEnd = Math.max(drag.originalStart + minLength, drag.originalEnd + delta);
       }
 
       onLayerTimingChange(drag.id, nextStart, nextEnd);
@@ -129,59 +233,78 @@ export default function Timeline({
     }
 
     if (!dragging.current) return;
-    const t = getTimeFromX(e.clientX);
+    const t = getTimeFromX(clientX);
     if (dragging.current === 'playhead') onSeek(t);
-    else if (dragging.current === 'trim-start') onTrimChange(Math.min(t, trimEnd - 0.5), trimEnd);
-    else onTrimChange(trimStart, Math.max(t, trimStart + 0.5));
-  };
+  }, [dur, getTimeFromX, onClipOrderChange, onLayerStackOrderChange, onLayerTimingChange, onMoveClip, onSeek, onTrimClip, stackItems]);
 
-  const onMouseUp = () => {
+  const onPointerMove = useCallback((e: React.PointerEvent) => {
+    if (activePointerId.current !== null && e.pointerId !== activePointerId.current) return;
+    handlePointerMove(e.clientX, e.clientY);
+  }, [handlePointerMove]);
+
+  const onPointerUp = useCallback(() => {
+    activePointerId.current = null;
     dragging.current = null;
     layerDragging.current = null;
-  };
+    clipDragging.current = null;
+    setStackDragPreview(null);
+  }, []);
+
+  useEffect(() => {
+    const handleDocumentPointerMove = (event: PointerEvent) => {
+      if (activePointerId.current !== null && event.pointerId !== activePointerId.current) return;
+      handlePointerMove(event.clientX, event.clientY);
+    };
+    const handleDocumentPointerUp = (event: PointerEvent) => {
+      if (activePointerId.current !== null && event.pointerId !== activePointerId.current) return;
+      onPointerUp();
+    };
+
+    document.addEventListener('pointermove', handleDocumentPointerMove);
+    document.addEventListener('pointerup', handleDocumentPointerUp);
+    document.addEventListener('pointercancel', handleDocumentPointerUp);
+    return () => {
+      document.removeEventListener('pointermove', handleDocumentPointerMove);
+      document.removeEventListener('pointerup', handleDocumentPointerUp);
+      document.removeEventListener('pointercancel', handleDocumentPointerUp);
+    };
+  }, [handlePointerMove, onPointerUp]);
 
   return (
-    <div className="bg-[#0e0702] border-t border-[#3d2510] px-3 sm:px-4 pt-2 sm:pt-3 pb-3 shrink-0">
+    <div className="bg-[#0e0702] border-t border-[#3d2510] px-2 sm:px-3 pt-1.5 sm:pt-2 pb-2 shrink-0">
       <div
-        className="relative select-none overflow-x-auto scrollbar-thin touch-pan-x"
+        className="relative max-h-[240px] min-h-[168px] touch-pan-y select-none overflow-y-auto overflow-x-hidden rounded border border-[#423112] bg-[#18120a] p-2 scrollbar-thin sm:max-h-[280px] sm:min-h-[180px]"
         ref={trackAreaRef}
-        onMouseMove={onMouseMove} onMouseUp={onMouseUp} onMouseLeave={onMouseUp} onMouseDown={(e) => onMouseDown(e, 'playhead')}>
-        <div className="flex items-center justify-between mb-2">
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+        onPointerDown={(e) => onPointerDown(e, 'playhead')}
+      >
+        <div className="sticky top-0 z-40 mb-2 flex items-center justify-between bg-[#18120a] pb-2">
           <span className="text-[#5a4530] text-[9px] font-bold uppercase tracking-widest">Timeline</span>
         </div>
 
         <TimelineRows
           dur={dur}
           currentTime={currentTime}
-          trimStart={trimStart}
-          trimEnd={trimEnd}
-          subtitles={subtitles}
           layers={layers}
-          hasAudio={hasAudio}
-          audioMuted={audioMuted}
-          timelineWidth={timelineWidth}
-          timeToPercent={timeToPercent}
-          onMouseDown={onMouseDown}
-          onLayerMouseDown={onLayerMouseDown}
+          mediaAssets={mediaAssets}
+          timelineClips={timelineClips}
+          canvasObjects={canvasObjects}
+          selectedClipId={selectedClipId}
           selectedLayerId={selectedLayerId}
-          onAudioMuteToggle={onAudioMuteToggle}
-          onAudioRemove={onAudioRemove}
-          onLayerOrderChange={onLayerOrderChange}
-          audioTrackContent={
-            waveformData ? (
-              <canvas
-                ref={audioCanvasRef}
-                className="absolute inset-0 w-full h-full"
-                style={{ opacity: audioMuted ? 0.3 : 1, transition: 'opacity 0.2s' }}
-              />
-            ) : hasAudio ? (
-              <div className={`absolute inset-1 rounded bg-[#6b7020] ${audioMuted ? 'opacity-25' : 'opacity-70'}`} />
-            ) : (
-              <div className="absolute inset-0 flex items-center justify-center">
-                <span className="text-[#3d2510] text-[9px]">No audio track</span>
-              </div>
-            )
-          }
+          timelineWidth={timelineWidth}
+          timelineLaneRef={timelineLaneRef}
+          timeToPercent={timeToPercent}
+          onPlayheadPointerDown={onPlayheadPointerDown}
+          onLayerPointerDown={onLayerPointerDown}
+          onClipPointerDown={onClipPointerDown}
+          onSelectClip={onSelectClip}
+          onSelectLayer={onSelectLayer}
+          onToggleClipMute={onToggleClipMute}
+          onDeleteClip={onDeleteClip}
+          onDeleteLayer={onDeleteLayer}
+          stackDragPreview={stackDragPreview}
         />
       </div>
     </div>

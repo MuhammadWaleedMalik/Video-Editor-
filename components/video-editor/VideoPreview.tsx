@@ -2,7 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
-import { Layer, LayerType, SubtitleChunk, VideoFormat } from '@/types/editor';
+import { CanvasObject, Layer, LayerType, MediaAsset, SubtitleChunk, TimelineClip, VideoFormat } from '@/types/editor';
 import VideoCanvasStage from './VideoCanvasStage';
 import VideoPlaybackControls from './VideoPlaybackControls';
 import { useVideoPreviewController } from './useVideoPreviewController';
@@ -16,6 +16,7 @@ interface VideoPreviewProps {
   subtitles: SubtitleChunk[];
   format: VideoFormat;
   onPlayPause: () => void;
+  onSeek: (time: number) => void;
   onTimeUpdate: (time: number) => void;
   onDurationChange: (duration: number) => void;
   videoRef: React.RefObject<HTMLVideoElement>;
@@ -26,9 +27,16 @@ interface VideoPreviewProps {
   onToggleMute: () => void;
   onPlaybackRateChange: (rate: number) => void;
   layers: Layer[];
+  mediaAssets: MediaAsset[];
+  timelineClips: TimelineClip[];
+  canvasObjects: CanvasObject[];
   selectedLayerId: string | null;
+  selectedClipId: string | null;
+  selectedCanvasObjectId: string | null;
   onSelectLayer: (id: string | null) => void;
+  onSelectClip: (id: string | null) => void;
   onUpdateLayer: (layer: Layer) => void;
+  onUpdateCanvasObject: (object: CanvasObject) => void;
   onAddLayerAtCoords: (type: Exclude<LayerType, 'audio'>, x: number, y: number) => void;
 }
 
@@ -41,6 +49,7 @@ export default function VideoPreview({
   subtitles,
   format,
   onPlayPause,
+  onSeek,
   onTimeUpdate,
   onDurationChange,
   subtitleFontScale,
@@ -51,11 +60,19 @@ export default function VideoPreview({
   onPlaybackRateChange,
   videoRef,
   layers,
+  mediaAssets,
+  timelineClips,
+  canvasObjects,
   selectedLayerId,
+  selectedClipId,
+  selectedCanvasObjectId,
   onSelectLayer,
+  onSelectClip,
   onUpdateLayer,
+  onUpdateCanvasObject,
   onAddLayerAtCoords,
 }: VideoPreviewProps) {
+  const hasCanvasContent = timelineClips.length > 0 || layers.some((layer) => layer.type !== 'audio');
   const { refs } = useVideoPreviewController({
     videoRef,
     isPlaying,
@@ -66,17 +83,22 @@ export default function VideoPreview({
     onUpdateLayer,
     onAddLayerAtCoords,
     onSelectLayer,
+    onSelectClip,
     layers,
+    mediaAssets,
+    timelineClips,
+    canvasObjects,
+    selectedLayerId,
+    selectedClipId,
+    selectedCanvasObjectId,
+    currentTime,
+    onUpdateCanvasObject,
     audioMuted,
     playbackRate,
   });
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col gap-2 overflow-hidden p-2 sm:p-3">
-      <div className="flex h-5 shrink-0 items-center gap-2">
-        <span className="ml-auto text-[10px] text-[#5a4530] font-mono">{format}</span>
-      </div>
-
+    <div className="flex h-full min-h-0 w-full flex-col gap-1.5 overflow-hidden p-1.5 sm:p-2">
       <VideoCanvasStage
         videoRef={videoRef}
         canvasRef={refs.canvasRef}
@@ -99,37 +121,24 @@ export default function VideoPreview({
         containerStyle={refs.containerStyle}
       />
 
-      <VideoPlaybackControls
-        playbackRate={playbackRate}
-        currentTime={currentTime}
-        trimStart={trimStart}
-        trimEnd={trimEnd}
-        audioMuted={audioMuted}
-        isPlaying={isPlaying}
-        onReset={() => {
-          if (videoRef.current) videoRef.current.currentTime = trimStart;
-        }}
-        onToggleMute={onToggleMute}
-        onPlayPause={onPlayPause}
-        onSpeedChange={onPlaybackRateChange}
-      />
-
-      <video
-        ref={videoRef}
-        src={videoUrl}
-        className="hidden"
-        muted={audioMuted}
-        onTimeUpdate={(e) => onTimeUpdate(e.currentTarget.currentTime)}
-        onDurationChange={(e) => onDurationChange(e.currentTarget.duration)}
-        onLoadedData={(e) => {
-          const video = e.currentTarget;
-          if (video.currentTime < trimStart || video.currentTime > trimEnd) {
-            video.currentTime = trimStart;
-          }
-          refs.drawFrame();
-        }}
-        onSeeked={() => refs.drawFrame()}
-      />
+      {hasCanvasContent ? (
+        <VideoPlaybackControls
+          playbackRate={playbackRate}
+          currentTime={currentTime}
+          trimStart={trimStart}
+          trimEnd={trimEnd}
+          audioMuted={audioMuted}
+          isPlaying={isPlaying}
+          onReset={() => {
+            if (videoRef.current) videoRef.current.currentTime = trimStart;
+            onSeek(trimStart);
+          }}
+          onToggleMute={onToggleMute}
+          onPlayPause={onPlayPause}
+          onSeek={onSeek}
+          onSpeedChange={onPlaybackRateChange}
+        />
+      ) : null}
     </div>
   );
 }

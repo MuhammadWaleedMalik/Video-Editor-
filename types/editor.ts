@@ -10,6 +10,56 @@ export type SubtitleChunk = {
 };
 
 export type LayerType = 'image' | 'video' | 'text' | 'audio';
+export type MediaAssetType = 'video' | 'image';
+export type MediaAssetStatus = 'uploading' | 'deployed' | 'failed';
+export type CanvasObjectType = 'video' | 'image' | 'text' | 'shape';
+
+export interface MediaAsset {
+  id: string;
+  type: MediaAssetType;
+  url: string;
+  originalFileName: string;
+  width: number;
+  height: number;
+  duration?: number;
+  status: MediaAssetStatus;
+  createdAt: number;
+  metadataLoaded: boolean;
+  error?: string;
+}
+
+export interface TimelineClip {
+  id: string;
+  assetId: string;
+  canvasObjectId: string;
+  type: MediaAssetType;
+  timelineStart: number;
+  sourceStart: number;
+  sourceEnd: number;
+  duration: number;
+  muted: boolean;
+  volume: number;
+  selected: boolean;
+  locked?: boolean;
+  hidden?: boolean;
+}
+
+export interface CanvasObject {
+  id: string;
+  assetId?: string;
+  clipId?: string;
+  type: CanvasObjectType;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+  scaleX: number;
+  scaleY: number;
+  opacity: number;
+  selected: boolean;
+  drawOrder: number;
+}
 
 export interface Layer {
   id: string;
@@ -49,5 +99,11 @@ export interface EditorState {
   subtitleFontFamily: string;
   layers: Layer[];
   selectedLayerId: string | null;
+  mediaAssets: MediaAsset[];
+  timelineClips: TimelineClip[];
+  canvasObjects: CanvasObject[];
+  selectedClipId: string | null;
+  selectedCanvasObjectId: string | null;
+  uploadError: string | null;
+  isUploadingMedia: boolean;
 }
-

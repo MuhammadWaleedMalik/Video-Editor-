@@ -1,5 +1,6 @@
 import { createDefaultLayer } from './videoEditorDefaults';
 import { EditorState, Layer, LayerType } from '@/types/editor';
+import { calculateLayerTimelineDuration, calculateTimelineDuration, clampPlayhead, reorderTimelineStack } from './timelineModel';
 
 export function useLayerControllers(
   state: EditorState,
@@ -7,32 +8,55 @@ export function useLayerControllers(
 ) {
   const set = (patch: Partial<EditorState>) => setState(patch);
 
+  function projectDuration(nextLayers: Layer[]) {
+    return Math.max(
+      calculateTimelineDuration(state.timelineClips),
+      calculateLayerTimelineDuration(nextLayers)
+    );
+  }
+
   function handleAddLayer(type: LayerType) {
     const newLayer = createDefaultLayer(type, state.layers.length);
+    const nextLayers = [...state.layers, newLayer];
+    const duration = projectDuration(nextLayers);
     set({
-      layers: [...state.layers, newLayer],
+      layers: nextLayers,
       selectedLayerId: newLayer.id,
+      duration,
+      currentTime: clampPlayhead(state.currentTime, duration),
     });
   }
 
   function handleAddLayerAtCoords(type: Exclude<LayerType, 'audio'>, x: number, y: number) {
     const newLayer = createDefaultLayer(type, state.layers.length, x, y);
+    const nextLayers = [...state.layers, newLayer];
+    const duration = projectDuration(nextLayers);
     set({
-      layers: [...state.layers, newLayer],
+      layers: nextLayers,
       selectedLayerId: newLayer.id,
+      duration,
+      currentTime: clampPlayhead(state.currentTime, duration),
     });
   }
 
   function handleUpdateLayer(updated: Layer) {
+    const nextLayers = state.layers.map((l) => (l.id === updated.id ? updated : l));
+    const duration = projectDuration(nextLayers);
     set({
-      layers: state.layers.map((l) => (l.id === updated.id ? updated : l)),
+      layers: nextLayers,
+      duration,
+      currentTime: clampPlayhead(state.currentTime, duration),
     });
   }
 
   function handleDeleteLayer(id: string) {
+    const nextLayers = state.layers.filter((l) => l.id !== id);
+    const duration = projectDuration(nextLayers);
     set({
-      layers: state.layers.filter((l) => l.id !== id),
+      layers: nextLayers,
       selectedLayerId: state.selectedLayerId === id ? null : state.selectedLayerId,
+      duration,
+      currentTime: clampPlayhead(state.currentTime, duration),
     });
   }
 
@@ -41,8 +65,12 @@ export function useLayerControllers(
   }
 
   function handleLayerTimingChange(id: string, startTime: number, endTime: number) {
+    const nextLayers = state.layers.map((layer) => (layer.id === id ? { ...layer, startTime, endTime } : layer));
+    const duration = projectDuration(nextLayers);
     set({
-      layers: state.layers.map((layer) => (layer.id === id ? { ...layer, startTime, endTime } : layer)),
+      layers: nextLayers,
+      duration,
+      currentTime: clampPlayhead(state.currentTime, duration),
     });
   }
 
@@ -68,6 +96,24 @@ export function useLayerControllers(
     });
   }
 
+  function handleLayerStackOrderChange(id: string, targetIndex: number) {
+    const reordered = reorderTimelineStack(
+      'layer',
+      id,
+      targetIndex,
+      state.layers,
+      state.timelineClips,
+      state.canvasObjects
+    );
+    if (!reordered) return;
+
+    set({
+      layers: reordered.layers,
+      canvasObjects: reordered.canvasObjects,
+      selectedLayerId: id,
+    });
+  }
+
   return {
     handleAddLayer,
     handleAddLayerAtCoords,
@@ -76,5 +122,6 @@ export function useLayerControllers(
     handleSelectLayer,
     handleLayerTimingChange,
     handleLayerOrderChange,
+    handleLayerStackOrderChange,
   };
 }

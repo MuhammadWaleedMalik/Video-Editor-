@@ -23,9 +23,9 @@ export default function EditorHeader({
   onImport,
 }: EditorHeaderProps) {
   return (
-    <header className="min-h-14 bg-[#120a02] border-b border-[#3d2510] px-4 py-2 shrink-0">
+    <header className="min-h-14 shrink-0 border-b border-[#3d2510] bg-[#120a02] px-2 py-2 sm:px-4">
       <div className="flex flex-col lg:flex-row gap-2 lg:items-center lg:justify-between">
-        <div className="flex items-center gap-3 min-w-0">
+        <div className="flex min-w-0 items-center gap-3 lg:w-auto">
           <div className="flex items-center gap-1.5 bg-[#c9b600] text-[#1a0c05] font-black text-sm px-2.5 py-1 rounded-md">
             <Zap size={14} fill="currentColor" />
             CVVID
@@ -33,13 +33,13 @@ export default function EditorHeader({
           <input
             value={title}
             onChange={(e) => onTitleChange(e.target.value)}
-            className="bg-transparent text-[#c8b88a] text-sm font-medium border-none outline-none focus:text-[#e8d5a0] min-w-0 w-full sm:w-auto"
+            className="min-w-0 flex-1 border-none bg-transparent text-sm font-medium text-[#c8b88a] outline-none focus:text-[#e8d5a0] sm:w-auto"
             placeholder="Project title — Draft"
           />
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="flex items-center gap-1.5">
+        <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 scrollbar-thin lg:w-auto lg:flex-wrap lg:justify-end lg:overflow-visible lg:pb-0">
+          <div className="flex shrink-0 items-center gap-1.5">
             <span className="text-[#5a4530] text-[10px] font-bold uppercase tracking-wider mr-1">Format</span>
             {FORMATS.map((fmt) => (
               <button
@@ -60,19 +60,19 @@ export default function EditorHeader({
 
           <button
             onClick={onPreviewOpen}
-            className="flex items-center gap-2 text-[#c8b88a] text-sm border border-[#3d2510] px-3 py-1.5 rounded-lg hover:border-[#c9b600] hover:text-[#e8d5a0] transition-colors"
+            className="flex shrink-0 items-center gap-2 rounded-lg border border-[#3d2510] px-3 py-1.5 text-sm text-[#c8b88a] transition-colors hover:border-[#c9b600] hover:text-[#e8d5a0]"
           >
             <Eye size={14} />
             Preview
           </button>
           <button
             onClick={onImport}
-            className="flex items-center gap-1.5 border border-[#3d2510] px-3 py-1.5 rounded-lg text-[#c8b88a] text-sm font-semibold hover:border-[#c9b600] hover:text-[#e8d5a0] transition-colors"
+            className="flex shrink-0 items-center gap-1.5 rounded-lg border border-[#3d2510] px-3 py-1.5 text-sm font-semibold text-[#c8b88a] transition-colors hover:border-[#c9b600] hover:text-[#e8d5a0]"
           >
             <UploadCloud size={14} />
             Import
           </button>
-          <button className="flex items-center gap-1.5 bg-[#c9b600] text-[#1a0c05] font-semibold text-sm px-3 py-1.5 rounded-lg hover:bg-[#e0cc00] transition-colors">
+          <button className="flex shrink-0 items-center gap-1.5 rounded-lg bg-[#c9b600] px-3 py-1.5 text-sm font-semibold text-[#1a0c05] transition-colors hover:bg-[#e0cc00]">
             Export
             <Download size={14} />
           </button>

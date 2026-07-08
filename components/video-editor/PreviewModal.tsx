@@ -64,8 +64,9 @@ export default function PreviewModal({
     const seekTo = active ? Math.min(active.endTime, Math.max(active.startTime, currentTime)) : safeStart;
     videoRef.currentTime = seekTo;
     setCurrentTime(seekTo);
-    void videoRef.play();
-    setPlaying(true);
+    void videoRef.play()
+      .then(() => setPlaying(true))
+      .catch(() => setPlaying(false));
   }, [playing, currentTime, safeStart, segments, videoRef]);
 
   useEffect(() => {
@@ -139,12 +140,12 @@ export default function PreviewModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 backdrop-blur-sm p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/85 p-2 backdrop-blur-sm sm:p-4"
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="relative flex flex-col bg-[#120a02] rounded-2xl overflow-hidden shadow-2xl border border-[#3d2510] w-[96vw] sm:w-[92vw] max-w-[980px] max-h-[92vh]">
+      <div className="relative flex max-h-[92svh] w-[98vw] max-w-[980px] flex-col overflow-hidden rounded-2xl border border-[#3d2510] bg-[#120a02] shadow-2xl supports-[height:100dvh]:max-h-[92dvh] sm:w-[92vw]">
         <header className="flex items-center justify-between px-4 py-3 border-b border-[#3d2510] shrink-0">
           <div className="flex items-center gap-2">
             <Maximize2 size={14} className="text-[#7a6040]" />
@@ -161,7 +162,7 @@ export default function PreviewModal({
 
         <div
           className="relative w-full shrink overflow-hidden bg-black"
-          style={{ aspectRatio: FORMAT_RATIO[format], maxHeight: 'calc(92vh - 126px)' }}
+          style={{ aspectRatio: FORMAT_RATIO[format], maxHeight: 'calc(92svh - 126px)' }}
         >
           <PreviewCanvas
             format={format}
@@ -169,6 +170,7 @@ export default function PreviewModal({
             videoUrl={videoUrl}
             muted={muted}
             activeSub={activeSub}
+            playing={playing}
             subtitleFontFamily={subtitleFontFamily}
             subtitleFontScale={subtitleFontScale}
             layers={layers}

@@ -7,8 +7,14 @@ export const FORMAT_RATIO: Record<VideoFormat, number> = {
 };
 
 export function formatTime(s: number): string {
-  const m = Math.floor(s / 60);
-  return `${String(m).padStart(2, '0')}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+  const safeSeconds = Math.max(0, s);
+  const h = Math.floor(safeSeconds / 3600);
+  const m = Math.floor((safeSeconds % 3600) / 60);
+  const sec = Math.floor(safeSeconds % 60);
+  if (h > 0) {
+    return `${h}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+  }
+  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
 export function getActiveSub(subtitles: Array<{ startTime: number; endTime: number; text: string }>, t: number) {

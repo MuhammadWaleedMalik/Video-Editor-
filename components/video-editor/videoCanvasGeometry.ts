@@ -1,4 +1,4 @@
-import { Layer } from '@/types/editor';
+import { CanvasObject, Layer } from '@/types/editor';
 import { LayerDragAction, LayerDragState } from './videoCanvasController';
 
 interface DragDelta {
@@ -7,7 +7,7 @@ interface DragDelta {
 }
 
 export function calcDragDelta(
-  event: MouseEvent,
+  event: MouseEvent | PointerEvent,
   state: LayerDragState
 ): DragDelta {
   return {
@@ -17,7 +17,7 @@ export function calcDragDelta(
 }
 
 export function buildDraggedLayerRect(
-  layer: Layer,
+  layer: Pick<Layer | CanvasObject, 'x' | 'y' | 'width' | 'height'>,
   action: LayerDragAction,
   state: LayerDragState,
   deltaX: number,

@@ -98,7 +98,7 @@ export default function SubtitleEditorPanel({
   }
 
   return (
-    <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden border-l border-[#3d2510] bg-[#120a02] md:w-72">
+    <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden border-l border-[#3d2510] bg-[#120a02]">
       <div className="flex items-center justify-between px-4 py-3 border-b border-[#3d2510]">
         <h2 className="text-[#e8d5a0] text-sm font-bold">Subtitles</h2>
         <button className="text-[10px] font-bold px-2 py-0.5 rounded bg-[#2d1a08] text-[#c8b88a] border border-[#3d2510]">

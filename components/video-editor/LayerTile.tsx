@@ -26,10 +26,31 @@ function renderSource(layer: Layer, activeIcon: LayerTileProps['previewIcon']) {
     return (
       <video
         muted
+        playsInline
         preload="metadata"
         src={layer.src}
         className="h-full w-full object-cover rounded"
       />
+    );
+  }
+  if (layer.type === 'text') {
+    const text = layer.text?.trim() || 'Text';
+    return (
+      <div
+        className="flex h-full w-full items-center justify-center overflow-hidden rounded p-2 text-center"
+        style={{ backgroundColor: layer.bgColor === '#00000000' ? '#1a1007' : layer.bgColor || '#1a1007' }}
+      >
+        <span
+          className="block max-h-full overflow-hidden break-words leading-tight"
+          style={{
+            color: layer.color || '#ffffff',
+            fontFamily: layer.fontFamily || 'Inter, Arial, sans-serif',
+            fontSize: `${Math.max(10, Math.min(18, Math.round((layer.fontSize || 20) * 0.6)))}px`,
+          }}
+        >
+          {text}
+        </span>
+      </div>
     );
   }
   return fallbackLabel(activeIcon, 'No asset');

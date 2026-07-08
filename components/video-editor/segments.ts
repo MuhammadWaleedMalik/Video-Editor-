@@ -34,10 +34,6 @@ export function getSegmentAtOrAfter(segments: VideoSegment[], time: number) {
   return segments[segments.length - 1];
 }
 
-export function getSegmentIndex(segments: VideoSegment[], time: number): number {
-  return segments.findIndex((segment) => time >= segment.startTime && time <= segment.endTime);
-}
-
 export function getTimelineDuration(segments: VideoSegment[]) {
   if (!segments.length) return 0;
   return segments.reduce((acc, segment) => acc + (segment.endTime - segment.startTime), 0);

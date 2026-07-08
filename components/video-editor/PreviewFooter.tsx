@@ -1,5 +1,6 @@
 'use client';
 
+import { useCallback, useRef } from 'react';
 import { Pause, Play, Volume2, VolumeX } from 'lucide-react';
 import { formatTime } from './videoCanvas';
 
@@ -30,20 +31,50 @@ export default function PreviewFooter({
   onExportSrt,
   onExportVtt,
 }: PreviewFooterProps) {
-  function handleSeekBar(e: React.MouseEvent<HTMLDivElement>) {
-    const bar = e.currentTarget.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (e.clientX - bar.left) / bar.width));
+  const seekBarRef = useRef<HTMLDivElement>(null);
+
+  const seekFromClientX = useCallback((clientX: number) => {
+    const seekBar = seekBarRef.current;
+    if (!seekBar) return;
+    const bar = seekBar.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - bar.left) / Math.max(bar.width, 1)));
     onSeek(startAt + ratio * Math.max(totalDuration, 0.001));
+  }, [onSeek, startAt, totalDuration]);
+
+  function handleSeekPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    seekFromClientX(e.clientX);
+  }
+
+  function handleSeekPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+    if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+    seekFromClientX(e.clientX);
+  }
+
+  function handleSeekPointerUp(e: React.PointerEvent<HTMLDivElement>) {
+    if (e.currentTarget.hasPointerCapture(e.pointerId)) {
+      e.currentTarget.releasePointerCapture(e.pointerId);
+    }
   }
 
   return (
     <div className="px-4 py-3 flex flex-col gap-2 shrink-0">
-      <div className="h-1.5 bg-[#2d1a08] rounded-full cursor-pointer group" onClick={handleSeekBar}>
+      <div
+        ref={seekBarRef}
+        className="h-4 touch-none cursor-pointer py-1.5"
+        onPointerDown={handleSeekPointerDown}
+        onPointerMove={handleSeekPointerMove}
+        onPointerUp={handleSeekPointerUp}
+        onPointerCancel={handleSeekPointerUp}
+      >
+        <div className="h-1.5 rounded-full bg-[#2d1a08]">
         <div
           className="h-full bg-[#c9b600] rounded-full relative transition-all"
           style={{ width: `${progress * 100}%` }}
         >
           <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-[#c9b600] rounded-full border-2 border-[#1a0c05]" />
+        </div>
         </div>
       </div>
 

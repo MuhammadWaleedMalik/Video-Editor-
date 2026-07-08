@@ -19,6 +19,13 @@ export const initialState: EditorState = {
   subtitleFontFamily: 'Inter, Arial, sans-serif',
   layers: [],
   selectedLayerId: null,
+  mediaAssets: [],
+  timelineClips: [],
+  canvasObjects: [],
+  selectedClipId: null,
+  selectedCanvasObjectId: null,
+  uploadError: null,
+  isUploadingMedia: false,
 };
 
 export async function extractWaveform(url: string): Promise<Float32Array | null> {

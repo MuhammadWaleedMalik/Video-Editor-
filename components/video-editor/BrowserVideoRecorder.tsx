@@ -168,7 +168,7 @@ export default function BrowserVideoRecorder({
 
         <div className="p-3">
           <div className="aspect-video bg-black rounded-lg overflow-hidden">
-            <video ref={videoRef} className="w-full h-full" muted playsInline autoPlay />
+            <video ref={videoRef} className="h-full w-full" muted playsInline />
           </div>
 
           {error ? (

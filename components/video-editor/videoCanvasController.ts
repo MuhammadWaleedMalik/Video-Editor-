@@ -1,4 +1,4 @@
-import { Layer, LayerType, SubtitleChunk, VideoFormat } from '@/types/editor';
+import { CanvasObject, Layer, LayerType, MediaAsset, SubtitleChunk, TimelineClip, VideoFormat } from '@/types/editor';
 
 export type LayerDragAction = 'move' | 'resize-tl' | 'resize-tr' | 'resize-bl' | 'resize-br';
 
@@ -13,11 +13,11 @@ export interface PreviewCanvasController {
   measureCanvas: () => void;
   drawFrame: () => void;
   handleDrop: (e: React.DragEvent) => void;
-  handleContainerClick: (e: React.MouseEvent) => void;
+  handleContainerClick: (e: React.PointerEvent) => void;
   handleTextChange: (id: string, text: string) => void;
   handleLayerMouseDown: (
-    e: React.MouseEvent,
-    layer: Layer,
+    e: React.PointerEvent,
+    layer: Layer | CanvasObject,
     action: LayerDragAction
   ) => void;
 }
@@ -32,7 +32,16 @@ export interface UseVideoCanvasControllerArgs {
   onUpdateLayer: (layer: Layer) => void;
   onAddLayerAtCoords: (type: Exclude<LayerType, 'audio'>, x: number, y: number) => void;
   onSelectLayer: (id: string | null) => void;
+  onSelectClip: (id: string | null) => void;
   layers: Layer[];
+  mediaAssets: MediaAsset[];
+  timelineClips: TimelineClip[];
+  canvasObjects: CanvasObject[];
+  selectedLayerId: string | null;
+  selectedClipId: string | null;
+  selectedCanvasObjectId: string | null;
+  currentTime: number;
+  onUpdateCanvasObject: (object: CanvasObject) => void;
   audioMuted: boolean;
   playbackRate: number;
 }

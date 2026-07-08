@@ -43,8 +43,9 @@ export default function ImportedVideoPage() {
     if (videoRef.currentTime < trimStart || videoRef.currentTime >= trimEnd) {
       videoRef.currentTime = trimStart;
     }
-    void videoRef.play();
-    setPlaying(true);
+    void videoRef.play()
+      .then(() => setPlaying(true))
+      .catch(() => setPlaying(false));
   }
 
   function handleTimeUpdate() {
@@ -66,7 +67,7 @@ export default function ImportedVideoPage() {
 
   if (!draft?.videoUrl) {
     return (
-      <main className="flex h-screen items-center justify-center bg-[#1a0c05] p-6 text-center">
+      <main className="flex h-[100svh] items-center justify-center bg-[#1a0c05] p-6 text-center supports-[height:100dvh]:h-[100dvh]">
         <div className="max-w-sm rounded-xl border border-[#3d2510] bg-[#120a02] p-6">
           <p className="text-sm font-semibold text-[#e8d5a0]">No imported video found.</p>
           <button
@@ -81,7 +82,7 @@ export default function ImportedVideoPage() {
   }
 
   return (
-    <main className="flex h-screen flex-col overflow-hidden bg-[#1a0c05] text-[#c8b88a]">
+    <main className="flex h-[100svh] flex-col overflow-hidden bg-[#1a0c05] text-[#c8b88a] supports-[height:100dvh]:h-[100dvh]">
       <header className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[#3d2510] bg-[#120a02] px-4 py-3">
         <div>
           <h1 className="text-sm font-bold text-[#e8d5a0]">{draft.title}</h1>
@@ -118,7 +119,7 @@ export default function ImportedVideoPage() {
       <section className="flex min-h-0 flex-1 items-center justify-center p-4">
         <div
           className="relative w-full max-w-5xl overflow-hidden rounded-xl bg-black shadow-2xl"
-          style={{ aspectRatio: FORMAT_RATIO[draft.format], maxHeight: 'calc(100vh - 130px)' }}
+          style={{ aspectRatio: FORMAT_RATIO[draft.format], maxHeight: 'calc(100svh - 130px)' }}
         >
           <PreviewCanvas
             format={draft.format}
@@ -126,6 +127,7 @@ export default function ImportedVideoPage() {
             videoUrl={draft.videoUrl}
             muted={draft.audioMuted}
             activeSub={activeSub}
+            playing={playing}
             subtitleFontFamily={draft.subtitleFontFamily}
             subtitleFontScale={draft.subtitleFontScale}
             layers={draft.layers}

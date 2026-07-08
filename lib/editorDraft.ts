@@ -1,4 +1,4 @@
-import { EditorState, Layer, SubtitleChunk } from '@/types/editor';
+import { CanvasObject, EditorState, Layer, MediaAsset, SubtitleChunk, TimelineClip } from '@/types/editor';
 
 export interface EditorDraftPayload {
   title: string;
@@ -13,6 +13,11 @@ export interface EditorDraftPayload {
   subtitleFontScale: number;
   subtitleFontFamily: string;
   layers: Layer[];
+  mediaAssets: MediaAsset[];
+  timelineClips: TimelineClip[];
+  canvasObjects: CanvasObject[];
+  selectedClipId: string | null;
+  selectedCanvasObjectId: string | null;
   videoFileName: string | null;
   videoUrl: string | null;
   videoSourceHint: string | null;
@@ -34,6 +39,11 @@ export function buildEditorDraft(state: EditorState, title: string): EditorDraft
     subtitleFontScale: state.subtitleFontScale,
     subtitleFontFamily: state.subtitleFontFamily,
     layers: state.layers.map((layer) => ({ ...layer })),
+    mediaAssets: state.mediaAssets.map((asset) => ({ ...asset })),
+    timelineClips: state.timelineClips.map((clip) => ({ ...clip })),
+    canvasObjects: state.canvasObjects.map((object) => ({ ...object })),
+    selectedClipId: state.selectedClipId,
+    selectedCanvasObjectId: state.selectedCanvasObjectId,
     videoFileName: state.videoFile?.name ?? null,
     videoUrl: state.videoUrl,
     videoSourceHint: state.videoUrl ? 'blob-source' : null,

@@ -1,7 +1,7 @@
-import { Layers, Plus, Image as ImageIcon, Film, Type, Music, Captions } from 'lucide-react';
+import { Image as ImageIcon, Film, Type, Music } from 'lucide-react';
 import { LayerType } from '@/types/editor';
 
-export type ObjectType = LayerType | 'subtitle';
+export type ObjectType = LayerType;
 
 interface ObjectTypeMeta {
   type: ObjectType;
@@ -10,11 +10,10 @@ interface ObjectTypeMeta {
 }
 
 export const OBJECT_TYPES: ObjectTypeMeta[] = [
-  { type: 'image', title: 'Img', icon: ImageIcon },
-  { type: 'video', title: 'Vid', icon: Film },
-  { type: 'text', title: 'Txt', icon: Type },
-  { type: 'audio', title: 'Aud', icon: Music },
-  { type: 'subtitle', title: 'Sub', icon: Captions },
+  { type: 'video', title: 'Video', icon: Film },
+  { type: 'image', title: 'Image', icon: ImageIcon },
+  { type: 'text', title: 'Text', icon: Type },
+  { type: 'audio', title: 'Audio', icon: Music },
 ];
 
 interface LayerTypeMenuProps {
@@ -24,7 +23,7 @@ interface LayerTypeMenuProps {
 
 export default function LayerTypeMenu({ activeType, onChange }: LayerTypeMenuProps) {
   return (
-    <div className="grid grid-cols-5 gap-1">
+    <div className="grid grid-cols-4 gap-1">
       {OBJECT_TYPES.map((entry) => {
         const MetaIcon = entry.icon;
         const isActive = activeType === entry.type;

@@ -1,127 +1,93 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { EditorState, VideoFormat } from '@/types/editor';
-import { getSegmentIndex, sanitizeTrimRange } from './segments';
+import { clampPlayhead } from './timelineModel';
 
 export interface PlaybackControllers {
-  trimSegments: Array<{ startTime: number; endTime: number }>;
   handlePlayPause: () => void;
   handleTimeUpdate: (time: number) => void;
   handleDurationChange: (duration: number) => void;
   handleSeek: (time: number) => void;
   handleFormatChange: (format: VideoFormat) => void;
-  handleTrimChange: (start: number, end: number) => void;
   handlePlaybackRateChange: (playbackRate: number) => void;
 }
 
 export function usePlaybackControllers(
   state: EditorState,
   setState: (patch: Partial<EditorState>) => void,
-  trimSegments: Array<{ startTime: number; endTime: number }>,
   videoRef: React.RefObject<HTMLVideoElement>
 ): PlaybackControllers {
+  const animationRef = useRef<number | null>(null);
+  const lastTickRef = useRef<number | null>(null);
   const set = useCallback((patch: Partial<EditorState>) => {
     setState({ ...patch });
   }, [setState]);
 
-  function clampToTrim(time: number) {
-    const range = sanitizeTrimRange(state.duration, state.trimStart, state.trimEnd);
-    return Math.max(range.trimStart, Math.min(time, range.trimEnd));
-  }
+  const timelineDuration = state.duration;
+
+  useEffect(() => {
+    if (!state.isPlaying) {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+      animationRef.current = null;
+      lastTickRef.current = null;
+      return;
+    }
+
+    const step = (now: number) => {
+      if (lastTickRef.current == null) lastTickRef.current = now;
+      const delta = ((now - lastTickRef.current) / 1000) * state.playbackRate;
+      lastTickRef.current = now;
+      const next = clampPlayhead(state.currentTime + delta, timelineDuration);
+      if (timelineDuration <= 0 || next >= timelineDuration) {
+        set({ currentTime: timelineDuration, isPlaying: false });
+        return;
+      }
+      set({ currentTime: next });
+      animationRef.current = requestAnimationFrame(step);
+    };
+
+    animationRef.current = requestAnimationFrame(step);
+    return () => {
+      if (animationRef.current) cancelAnimationFrame(animationRef.current);
+    };
+  }, [state.isPlaying, state.currentTime, state.playbackRate, timelineDuration, set]);
 
   function handlePlayPause() {
-    const v = videoRef.current;
-    if (!v) return;
     if (state.isPlaying) {
-      v.pause();
+      if (videoRef.current) videoRef.current.pause();
       set({ isPlaying: false });
       return;
     }
-
-    const range = sanitizeTrimRange(state.duration, state.trimStart, state.trimEnd);
-    const inTrim = state.currentTime >= range.trimStart && state.currentTime < range.trimEnd;
-    const seekTo = inTrim ? state.currentTime : range.trimStart;
-    v.currentTime = seekTo;
-    set({ currentTime: seekTo });
-
-    if (!trimSegments.length) return;
-    v.play().then(() => set({ isPlaying: true })).catch(() => set({ isPlaying: false }));
+    if (timelineDuration <= 0) {
+      set({ currentTime: 0, isPlaying: false });
+      return;
+    }
+    const seekTo = state.currentTime >= timelineDuration ? 0 : clampPlayhead(state.currentTime, timelineDuration);
+    if (videoRef.current) videoRef.current.currentTime = seekTo;
+    set({ currentTime: seekTo, isPlaying: true });
   }
 
   function handleTimeUpdate(time: number) {
-    const video = videoRef.current;
-    const { trimStart, trimEnd } = sanitizeTrimRange(state.duration, state.trimStart, state.trimEnd);
-    const segmentIndex = getSegmentIndex(trimSegments, time);
-
-    if (!trimSegments.length) {
-      set({ currentTime: Math.max(0, Math.min(trimEnd, time)) });
-      return;
-    }
-
-    if (time < trimStart) {
-      if (video) video.currentTime = trimStart;
-      set({ currentTime: trimStart });
-      return;
-    }
-
-    if (segmentIndex === -1) {
-      if (time > trimEnd && video) {
-        video.pause();
-        video.currentTime = trimEnd;
-        set({ isPlaying: false, currentTime: trimEnd });
-        return;
-      }
-      set({ currentTime: clampToTrim(time) });
-      return;
-    }
-
-    const segment = trimSegments[segmentIndex];
-    if (state.isPlaying && segment && time >= segment.endTime - 0.03) {
-      const nextSegment = trimSegments[segmentIndex + 1];
-      if (nextSegment) {
-        if (!video) return;
-        video.pause();
-        video.currentTime = nextSegment.startTime;
-        set({ currentTime: nextSegment.startTime });
-        return;
-      }
-      if (video) video.pause();
-      set({ isPlaying: false, currentTime: segment.endTime });
-      return;
-    }
-
-    if (time > trimEnd) {
-      if (!video) return;
-      video.pause();
-      set({ isPlaying: false, currentTime: trimEnd });
-      return;
-    }
-    set({ currentTime: time });
+    const clamped = clampPlayhead(time, timelineDuration);
+    if (videoRef.current) videoRef.current.currentTime = clamped;
+    set({ currentTime: clamped });
   }
 
   function handleDurationChange(duration: number) {
-    const next = sanitizeTrimRange(duration, state.trimStart, duration);
     set({
       duration,
-      trimStart: next.trimStart,
-      trimEnd: next.trimEnd,
+      trimStart: 0,
+      trimEnd: duration,
     });
   }
 
   function handleSeek(time: number) {
-    const seekTo = clampToTrim(time);
-    if (videoRef.current) videoRef.current.currentTime = seekTo;
-    set({ currentTime: seekTo });
+    const clamped = clampPlayhead(time, timelineDuration);
+    if (videoRef.current) videoRef.current.currentTime = clamped;
+    set({ currentTime: clamped });
   }
 
   function handleFormatChange(format: VideoFormat) {
     set({ format });
-  }
-
-  function handleTrimChange(start: number, end: number) {
-    const range = sanitizeTrimRange(state.duration, start, end);
-    const nextCurrentTime = Math.max(range.trimStart, Math.min(state.currentTime, range.trimEnd));
-    set({ trimStart: range.trimStart, trimEnd: range.trimEnd, currentTime: nextCurrentTime });
-    if (videoRef.current) videoRef.current.currentTime = nextCurrentTime;
   }
 
   function handlePlaybackRateChange(playbackRate: number) {
@@ -130,13 +96,11 @@ export function usePlaybackControllers(
   }
 
   return {
-    trimSegments,
     handlePlayPause,
     handleTimeUpdate,
     handleDurationChange,
     handleSeek,
     handleFormatChange,
-    handleTrimChange,
     handlePlaybackRateChange,
   };
 }

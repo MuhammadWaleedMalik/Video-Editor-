@@ -6,7 +6,6 @@ import LeftSidebar from './LeftSidebar';
 import VideoPreview from './VideoPreview';
 import SubtitlesPanel from './SubtitlesPanel';
 import Timeline from './Timeline';
-import VideoUpload from './VideoUpload';
 import PreviewModal from './PreviewModal';
 import useVideoEditorController from './editorController';
 import { buildEditorDraft, saveEditorDraft } from '@/lib/editorDraft';
@@ -14,16 +13,16 @@ import { buildEditorDraft, saveEditorDraft } from '@/lib/editorDraft';
 export default function VideoEditor() {
   const router = useRouter();
   const editor = useVideoEditorController();
-  const hasVideo = Boolean(editor.state.videoUrl);
+  const hasTimeline = editor.state.timelineClips.length > 0;
 
   function handleImport() {
-    if (!editor.state.videoUrl) return;
+    if (!hasTimeline) return;
     saveEditorDraft(buildEditorDraft(editor.state, editor.title));
     router.push('/import');
   }
 
   return (
-    <div className="flex h-screen min-h-0 flex-col overflow-hidden bg-[#1a0c05]">
+    <div className="flex h-[100svh] min-h-0 flex-col overflow-hidden bg-[#1a0c05] supports-[height:100dvh]:h-[100dvh]">
       <EditorHeader
         title={editor.title}
         format={editor.state.format}
@@ -33,50 +32,60 @@ export default function VideoEditor() {
         onImport={handleImport}
       />
 
-      <div className="min-h-0 flex-1 overflow-y-auto md:overflow-hidden">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain md:overflow-hidden">
         <div className="flex min-h-full flex-col md:h-full md:min-h-0 md:flex-row">
-          <div className="w-full shrink-0 max-h-[34vh] md:h-full md:max-h-none md:w-60">
+          <div className="w-full shrink-0 max-h-[30svh] md:h-full md:max-h-none md:w-64 lg:w-72">
             <LeftSidebar
               layers={editor.state.layers}
+              mediaAssets={editor.state.mediaAssets}
               selectedLayerId={editor.state.selectedLayerId}
               onSelectLayer={editor.handleSelectLayer}
               onAddLayer={editor.handleAddLayer}
               onDeleteLayer={editor.handleDeleteLayer}
+              onVideoUpload={editor.handleVideoUpload}
+              onImageUpload={editor.handleImageUpload}
+              onPlaceAsset={editor.handlePlaceAsset}
+              isUploadingMedia={editor.state.isUploadingMedia}
+              uploadError={editor.state.uploadError}
             />
           </div>
 
-          <div className="flex min-h-[360px] min-w-0 flex-1 md:h-full md:min-h-0">
-            {hasVideo ? (
-              <VideoPreview
-                videoUrl={editor.state.videoUrl!}
-                isPlaying={editor.state.isPlaying}
-                currentTime={editor.state.currentTime}
-                trimStart={editor.state.trimStart}
-                trimEnd={editor.state.trimEnd || editor.state.duration}
-                subtitles={editor.state.subtitles}
-                format={editor.state.format}
-                onPlayPause={editor.handlePlayPause}
-                onTimeUpdate={editor.handleTimeUpdate}
-                onDurationChange={editor.handleDurationChange}
-                subtitleFontScale={editor.state.subtitleFontScale}
-                subtitleFontFamily={editor.state.subtitleFontFamily}
-                videoRef={editor.videoRef}
-                audioMuted={editor.state.audioMuted}
-                playbackRate={editor.state.playbackRate}
-                onToggleMute={editor.handleAudioMuteToggle}
-                onPlaybackRateChange={editor.handlePlaybackRateChange}
-                layers={editor.state.layers}
-                selectedLayerId={editor.state.selectedLayerId}
-                onSelectLayer={editor.handleSelectLayer}
-                onUpdateLayer={editor.handleUpdateLayer}
-                onAddLayerAtCoords={editor.handleAddLayerAtCoords}
-              />
-            ) : (
-              <VideoUpload onVideoUpload={editor.handleVideoUpload} />
-            )}
+          <div className="flex min-h-[260px] min-w-0 flex-1 sm:min-h-[340px] md:h-full md:min-h-0">
+            <VideoPreview
+              videoUrl={editor.state.videoUrl ?? ''}
+              isPlaying={editor.state.isPlaying}
+              currentTime={editor.state.currentTime}
+              trimStart={0}
+              trimEnd={editor.state.duration}
+              subtitles={editor.state.subtitles}
+              format={editor.state.format}
+              onPlayPause={editor.handlePlayPause}
+              onSeek={editor.handleSeek}
+              onTimeUpdate={editor.handleTimeUpdate}
+              onDurationChange={editor.handleDurationChange}
+              subtitleFontScale={editor.state.subtitleFontScale}
+              subtitleFontFamily={editor.state.subtitleFontFamily}
+              videoRef={editor.videoRef}
+              audioMuted={editor.state.audioMuted}
+              playbackRate={editor.state.playbackRate}
+              onToggleMute={editor.handleAudioMuteToggle}
+              onPlaybackRateChange={editor.handlePlaybackRateChange}
+              layers={editor.state.layers}
+              mediaAssets={editor.state.mediaAssets}
+              timelineClips={editor.state.timelineClips}
+              canvasObjects={editor.state.canvasObjects}
+              selectedLayerId={editor.state.selectedLayerId}
+              selectedClipId={editor.state.selectedClipId}
+              selectedCanvasObjectId={editor.state.selectedCanvasObjectId}
+              onSelectLayer={editor.handleSelectLayer}
+              onSelectClip={editor.handleSelectClip}
+              onUpdateLayer={editor.handleUpdateLayer}
+              onUpdateCanvasObject={editor.handleUpdateCanvasObject}
+              onAddLayerAtCoords={editor.handleAddLayerAtCoords}
+            />
           </div>
 
-          <div className="w-full shrink-0 max-h-[46vh] md:h-full md:max-h-none md:w-72">
+          <div className="w-full shrink-0 max-h-[42svh] md:h-full md:max-h-none md:w-64 lg:w-[17rem] xl:w-72">
             <SubtitlesPanel
               subtitles={editor.state.subtitles}
               currentTime={editor.state.currentTime}
@@ -97,7 +106,11 @@ export default function VideoEditor() {
               onSubtitleFontFamilyChange={editor.handleSubtitleFontFamilyChange}
               layers={editor.state.layers}
               selectedLayerId={editor.state.selectedLayerId}
+              canvasObjects={editor.state.canvasObjects}
+              selectedCanvasObjectId={editor.state.selectedCanvasObjectId}
               onUpdateLayer={editor.handleUpdateLayer}
+              onUpdateCanvasObject={editor.handleUpdateCanvasObject}
+              onSelectClip={editor.handleSelectClip}
               onDeleteLayer={editor.handleDeleteLayer}
               onSelectLayer={editor.handleSelectLayer}
             />
@@ -105,27 +118,29 @@ export default function VideoEditor() {
         </div>
       </div>
 
-      <Timeline
+        <Timeline
         duration={editor.state.duration}
         currentTime={editor.state.currentTime}
-        trimStart={editor.state.trimStart}
-        trimEnd={editor.state.trimEnd || editor.state.duration}
-        subtitles={editor.state.subtitles}
         layers={editor.state.layers}
         selectedLayerId={editor.state.selectedLayerId}
-        hasAudio={editor.state.hasAudio}
-        audioMuted={editor.state.audioMuted}
-        waveformData={editor.waveformData}
         onSeek={editor.handleSeek}
-        onTrimChange={editor.handleTrimChange}
-        onAudioMuteToggle={editor.handleAudioMuteToggle}
-        onAudioRemove={editor.handleAudioRemove}
         onSelectLayer={editor.handleSelectLayer}
+        onDeleteLayer={editor.handleDeleteLayer}
         onLayerTimingChange={editor.handleLayerTimingChange}
-        onLayerOrderChange={editor.handleLayerOrderChange}
+        onLayerStackOrderChange={editor.handleLayerStackOrderChange}
+        mediaAssets={editor.state.mediaAssets}
+        timelineClips={editor.state.timelineClips}
+        canvasObjects={editor.state.canvasObjects}
+        selectedClipId={editor.state.selectedClipId}
+        onSelectClip={editor.handleSelectClip}
+        onMoveClip={editor.handleMoveClip}
+        onTrimClip={editor.handleTrimClip}
+        onClipOrderChange={editor.handleClipOrderChange}
+        onToggleClipMute={editor.handleToggleClipMute}
+        onDeleteClip={editor.handleDeleteClip}
       />
 
-      {editor.showPreview && hasVideo && (
+      {editor.showPreview && editor.state.videoUrl && (
         <PreviewModal
           videoUrl={editor.state.videoUrl!}
           format={editor.state.format}

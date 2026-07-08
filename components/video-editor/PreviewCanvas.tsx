@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useRef } from 'react';
 import { SubtitleChunk, Layer } from '@/types/editor';
 import { FORMAT_RATIO } from './videoCanvas';
 import { VideoFormat } from '@/types/editor';
@@ -10,6 +11,7 @@ interface PreviewCanvasProps {
   videoUrl: string;
   muted: boolean;
   activeSub: SubtitleChunk | null;
+  playing: boolean;
   subtitleFontFamily: string;
   subtitleFontScale: number;
   layers: Layer[];
@@ -19,12 +21,58 @@ interface PreviewCanvasProps {
   onClick: () => void;
 }
 
+interface PreviewLayerVideoProps {
+  src: string;
+  muted: boolean;
+  playing: boolean;
+  layerTime: number;
+}
+
+function PreviewLayerVideo({ src, muted, playing, layerTime }: PreviewLayerVideoProps) {
+  const ref = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    const video = ref.current;
+    if (!video) return;
+
+    const nextTime = Number.isFinite(layerTime) ? Math.max(0, layerTime) : 0;
+    if (Math.abs(video.currentTime - nextTime) > 0.12) {
+      try {
+        video.currentTime = nextTime;
+      } catch {
+        // Mobile Safari can reject early seeks until metadata arrives; the next render will retry.
+      }
+    }
+
+    if (!playing) {
+      video.pause();
+      return;
+    }
+
+    void video.play().catch(() => {
+      video.pause();
+    });
+  }, [layerTime, playing, src]);
+
+  return (
+    <video
+      ref={ref}
+      src={src}
+      className="h-full w-full object-contain"
+      muted={muted}
+      playsInline
+      preload="metadata"
+    />
+  );
+}
+
 export default function PreviewCanvas({
   format,
   currentTime,
   videoUrl,
   muted,
   activeSub,
+  playing,
   subtitleFontFamily,
   subtitleFontScale,
   layers,
@@ -45,6 +93,8 @@ export default function PreviewCanvas({
         src={videoUrl}
         className="w-full h-full object-contain bg-black"
         muted={muted}
+        playsInline
+        preload="metadata"
         onTimeUpdate={onTimeUpdate}
         onEnded={onEnded}
         onClick={onClick}
@@ -83,7 +133,12 @@ export default function PreviewCanvas({
                 <img src={layer.src} alt={layer.name} className="w-full h-full object-contain" />
               )}
               {layer.type === 'video' && layer.src && (
-                <video src={layer.src} className="w-full h-full object-contain" muted={Boolean(layer.mediaMuted)} loop autoPlay playsInline />
+                <PreviewLayerVideo
+                  src={layer.src}
+                  muted={Boolean(layer.mediaMuted)}
+                  playing={playing}
+                  layerTime={Math.max(0, currentTime - layer.startTime)}
+                />
               )}
             </div>
           </div>
