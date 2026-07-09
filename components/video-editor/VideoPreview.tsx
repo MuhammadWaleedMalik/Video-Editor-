@@ -72,7 +72,7 @@ export default function VideoPreview({
   onUpdateCanvasObject,
   onAddLayerAtCoords,
 }: VideoPreviewProps) {
-  const hasCanvasContent = timelineClips.length > 0 || layers.some((layer) => layer.type !== 'audio');
+  const hasCanvasContent = timelineClips.length > 0 || layers.some((layer) => Boolean(layer.src) || layer.type !== 'audio');
   const { refs } = useVideoPreviewController({
     videoRef,
     isPlaying,

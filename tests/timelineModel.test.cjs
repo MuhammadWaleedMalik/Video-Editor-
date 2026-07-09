@@ -39,6 +39,7 @@ const {
   resizeImageClipEnd,
   sourceTimeForClip,
   splitClipAtMidpoint,
+  toggleClipMute,
   trimClipEnd,
   trimClipStart,
 } = sandbox.module.exports;
@@ -205,6 +206,28 @@ const clipA = clip({ id: 'a', assetId: 'same', muted: true });
 const clipB = clip({ id: 'b', assetId: 'same', muted: false });
 assert.equal(clipA.muted, true);
 assert.equal(clipB.muted, false);
+
+const sharedCanvasSplitClips = [
+  clip({ id: 'split-a', canvasObjectId: 'shared-object', muted: false, sourceEnd: 5, duration: 5 }),
+  clip({
+    id: 'split-b',
+    canvasObjectId: 'shared-object',
+    muted: false,
+    timelineStart: 5,
+    sourceStart: 5,
+    sourceEnd: 10,
+    duration: 5,
+  }),
+];
+const mutedSecondSplit = toggleClipMute(sharedCanvasSplitClips, 'split-b');
+assert.equal(mutedSecondSplit.find((item) => item.id === 'split-a').muted, false);
+assert.equal(mutedSecondSplit.find((item) => item.id === 'split-b').muted, true);
+const mutedFirstSplit = toggleClipMute(mutedSecondSplit, 'split-a');
+assert.equal(mutedFirstSplit.find((item) => item.id === 'split-a').muted, true);
+assert.equal(mutedFirstSplit.find((item) => item.id === 'split-b').muted, true);
+const unmutedSecondSplit = toggleClipMute(mutedFirstSplit, 'split-b');
+assert.equal(unmutedSecondSplit.find((item) => item.id === 'split-a').muted, true);
+assert.equal(unmutedSecondSplit.find((item) => item.id === 'split-b').muted, false);
 
 const assets = [
   { id: 'deployed', type: 'video', url: '/ok.mp4', originalFileName: 'ok.mp4', width: 10, height: 10, duration: 10, status: 'deployed', createdAt: 1, metadataLoaded: true },

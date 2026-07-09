@@ -14,6 +14,8 @@ interface TimelineProps {
   onSelectLayer: (id: string | null) => void;
   onDeleteLayer: (id: string) => void;
   onLayerTimingChange: (id: string, startTime: number, endTime: number) => void;
+  onSplitLayer: (id: string) => void;
+  onToggleLayerMute: (id: string) => void;
   onLayerStackOrderChange: (id: string, targetIndex: number) => void;
   mediaAssets: MediaAsset[];
   timelineClips: TimelineClip[];
@@ -68,6 +70,14 @@ const STACK_AUTO_SCROLL_MAX_SPEED = 18;
 const TIMELINE_AUTO_SCROLL_EDGE_PX = 96;
 const TIMELINE_AUTO_SCROLL_MAX_SPEED = 24;
 
+function getTimelineLayerRowKey(layer: Layer) {
+  return layer.type === 'audio' ? `audio-group:${layer.timelineGroupId ?? layer.id}` : `layer:${layer.id}`;
+}
+
+function getTimelineClipRowKey(clip: TimelineClip) {
+  return `clip-group:${clip.timelineGroupId ?? clip.canvasObjectId}`;
+}
+
 function clampTimelinePixelsPerSecond(value: number) {
   if (!Number.isFinite(value)) return TIMELINE_PIXELS_PER_SECOND;
   if (value <= FIT_TIMELINE_PIXELS_PER_SECOND) return FIT_TIMELINE_PIXELS_PER_SECOND;
@@ -83,6 +93,8 @@ export default function Timeline({
   onSelectLayer,
   onDeleteLayer,
   onLayerTimingChange,
+  onSplitLayer,
+  onToggleLayerMute,
   onLayerStackOrderChange,
   mediaAssets,
   timelineClips,
@@ -131,7 +143,7 @@ export default function Timeline({
     const rowIndexByItemKey = new Map<string, number>();
 
     stackItems.forEach((item, stackIndex) => {
-      const rowKey = item.kind === 'clip' ? `clip-object:${item.clip.canvasObjectId}` : `layer:${item.id}`;
+      const rowKey = item.kind === 'clip' ? getTimelineClipRowKey(item.clip) : getTimelineLayerRowKey(item.layer);
       const itemKey = item.kind === 'clip' ? `clip:${item.id}` : `layer:${item.id}`;
       const existingIndex = rowIndexByKey.get(rowKey);
       if (existingIndex !== undefined) {
@@ -567,29 +579,22 @@ export default function Timeline({
             <button
               type="button"
               onClick={() => adjustTimelineZoom(-6)}
-              className="flex h-6 w-6 items-center justify-center rounded-full bg-[#241508] text-[#c8b88a] hover:bg-[#3d2510] hover:text-[#f2d40b]"
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-[#3d2510] bg-[#241508] text-sm font-black leading-none text-[#c8b88a] shadow-[inset_0_1px_0_rgba(255,240,166,0.05)] transition hover:border-[#7d5d1d] hover:bg-[#3d2510] hover:text-[#f2d40b] active:scale-95"
               aria-label="Decrease timeline spacing"
             >
               -
             </button>
-            <input
-              type="range"
-              min={FIT_TIMELINE_PIXELS_PER_SECOND}
-              max={MAX_TIMELINE_PIXELS_PER_SECOND}
-              value={timelinePixelsPerSecond}
-              onChange={(event) => setTimelinePixelsPerSecond(clampTimelinePixelsPerSecond(Number(event.currentTarget.value)))}
-              className="h-1 w-24 accent-[#c9b600] sm:w-32"
-              aria-label="Timeline spacing"
-            />
+            <span className="min-w-16 rounded-full border border-[#3d2510] bg-[#1a0c05] px-2 py-1 text-center font-mono font-bold text-[#f2d40b] shadow-inner">
+              {timelineZoomLabel}
+            </span>
             <button
               type="button"
               onClick={() => adjustTimelineZoom(6)}
-              className="flex h-6 w-6 items-center justify-center rounded-full bg-[#241508] text-[#c8b88a] hover:bg-[#3d2510] hover:text-[#f2d40b]"
+              className="flex h-7 w-7 items-center justify-center rounded-full border border-[#3d2510] bg-[#241508] text-sm font-black leading-none text-[#c8b88a] shadow-[inset_0_1px_0_rgba(255,240,166,0.05)] transition hover:border-[#7d5d1d] hover:bg-[#3d2510] hover:text-[#f2d40b] active:scale-95"
               aria-label="Increase timeline spacing"
             >
               +
             </button>
-            <span className="min-w-12 text-right font-mono font-bold text-[#f2d40b]">{timelineZoomLabel}</span>
           </div>
         </div>
 
@@ -615,6 +620,8 @@ export default function Timeline({
           onToggleClipMute={onToggleClipMute}
           onDeleteClip={onDeleteClip}
           onDeleteLayer={onDeleteLayer}
+          onSplitLayer={onSplitLayer}
+          onToggleLayerMute={onToggleLayerMute}
           stackDragPreview={stackDragPreview}
         />
       </div>

@@ -1,8 +1,9 @@
 'use client';
 
 import { memo, useEffect, useMemo, useRef, useState } from 'react';
-import { Film, Image as ImageIcon, Layers, Loader2, Music, Trash2, Type as TypeIcon, Upload } from 'lucide-react';
+import { Camera, Film, Image as ImageIcon, Layers, Loader2, Music, Trash2, Type as TypeIcon, Upload } from 'lucide-react';
 import { Layer, LayerType, MediaAsset, TextAsset } from '@/types/editor';
+import BrowserVideoRecorder from './BrowserVideoRecorder';
 import LayerTypeMenu, { ObjectType, OBJECT_TYPES } from './LayerTypeMenu';
 import { MAX_TIMELINE_DURATION_SECONDS } from './timelineModel';
 
@@ -217,6 +218,7 @@ export default function LeftSidebar({
   uploadError,
 }: LeftSidebarProps) {
   const [activeType, setActiveType] = useState<ObjectType>('video');
+  const [showVideoRecorder, setShowVideoRecorder] = useState(false);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
@@ -249,6 +251,11 @@ export default function LeftSidebar({
     else if (activeType === 'audio') audioInputRef.current?.click();
   }
 
+  function handleRecordedVideo(file: File) {
+    setShowVideoRecorder(false);
+    onVideoUpload(file);
+  }
+
   return (
     <aside className="flex h-full w-full flex-col overflow-hidden border-b border-[#3d2510] bg-[#160d05] md:border-b-0 md:border-r">
         <div className="flex items-center gap-2 border-b border-[#3d2510] p-4">
@@ -267,7 +274,12 @@ export default function LeftSidebar({
             <h3 className="text-xs text-[#7a6040] font-semibold uppercase tracking-wider">
               {activeMeta?.title}
             </h3>
-            {isMediaTab ? (
+            {activeType === 'video' ? (
+              <span className="flex items-center gap-1 text-[10px] text-[#7a6040]">
+                {isUploadingMedia ? <Loader2 size={11} className="animate-spin text-[#c9b600]" /> : null}
+                Choose below
+              </span>
+            ) : isMediaTab ? (
               <button
                 type="button"
                 onClick={openActiveUpload}
@@ -322,9 +334,29 @@ export default function LeftSidebar({
             <p className="rounded border border-red-900/60 bg-red-950/30 p-2 text-[10px] text-red-200">{uploadError}</p>
           ) : null}
           {activeType === 'video' ? (
-            <p className="rounded-lg border border-[#4a3010] bg-[#201206] p-2 text-[10px] leading-relaxed text-[#b79b64]">
-              Max video length is 3 minutes ({MAX_TIMELINE_DURATION_SECONDS}s). Bigger videos are blocked before upload.
-            </p>
+            <>
+              <p className="rounded-lg border border-[#4a3010] bg-[#201206] p-2 text-[10px] leading-relaxed text-[#b79b64]">
+                Max video length is 3 minutes ({MAX_TIMELINE_DURATION_SECONDS}s). Bigger videos are blocked before upload.
+              </p>
+              <div className="grid grid-cols-1 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowVideoRecorder(true)}
+                  disabled={isUploadingMedia}
+                  className="group flex min-h-24 items-center gap-3 rounded-xl border border-[#5a3b14] bg-[#241508] p-3 text-left transition hover:border-[#c9b600] hover:bg-[#2d1a08] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#160d05] text-[#c9b600] shadow-inner shadow-black/40">
+                    {isUploadingMedia ? <Loader2 size={17} className="animate-spin" /> : <Camera size={17} />}
+                  </span>
+                  <span>
+                    <span className="block text-[12px] font-bold text-[#e8d5a0]">Add Video</span>
+                    <span className="mt-1 block text-[9px] leading-relaxed text-[#8b724c]">
+                      Browse a saved clip or record a new video.
+                    </span>
+                  </span>
+                </button>
+              </div>
+            </>
           ) : null}
           {activeType === 'audio' ? (
             <p className="rounded-lg border border-[#4a3010] bg-[#201206] p-2 text-[10px] leading-relaxed text-[#b79b64]">
@@ -398,13 +430,19 @@ export default function LeftSidebar({
                 })}
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={openActiveUpload}
-                className="w-full rounded-lg border border-dashed border-[#3d2510] bg-[#241508] p-3 text-sm text-[#7a6040] hover:border-[#5a4530] hover:text-[#c9b600]"
-              >
-                Upload your first {activeType}
-              </button>
+              activeType === 'video' ? (
+                <p className="rounded-lg border border-dashed border-[#3d2510] bg-[#1d1006] p-3 text-center text-xs leading-relaxed text-[#7a6040]">
+                  Browse a saved video or record a new one to add your first clip.
+                </p>
+              ) : (
+                <button
+                  type="button"
+                  onClick={openActiveUpload}
+                  className="w-full rounded-lg border border-dashed border-[#3d2510] bg-[#241508] p-3 text-sm text-[#7a6040] hover:border-[#5a4530] hover:text-[#c9b600]"
+                >
+                  Upload your first {activeType}
+                </button>
+              )
             )
           ) : textAssets.length ? (
             <div className="grid grid-cols-1 gap-2">
@@ -474,6 +512,14 @@ export default function LeftSidebar({
             </button>
           )}
         </div>
+        <BrowserVideoRecorder
+          isOpen={showVideoRecorder}
+          title="Add Video"
+          onClose={() => setShowVideoRecorder(false)}
+          onBrowse={onVideoUpload}
+          onCapture={handleRecordedVideo}
+          maxDurationSeconds={MAX_TIMELINE_DURATION_SECONDS}
+        />
       </aside>
   );
 }

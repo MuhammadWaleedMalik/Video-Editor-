@@ -194,6 +194,8 @@ export default function VideoEditor() {
         onSelectLayer={editor.handleSelectLayer}
         onDeleteLayer={editor.handleDeleteLayer}
         onLayerTimingChange={editor.handleLayerTimingChange}
+        onSplitLayer={editor.handleSplitLayer}
+        onToggleLayerMute={editor.handleToggleLayerMute}
         onLayerStackOrderChange={editor.handleLayerStackOrderChange}
         mediaAssets={editor.state.mediaAssets}
         timelineClips={editor.state.timelineClips}

@@ -12,7 +12,7 @@ import { getTimelineStackItems, isClipActive, shouldRenderAsset, sourceTimeForCl
 
 type ImageCache = Map<string, HTMLImageElement>;
 interface VideoDecoder {
-  video: HTMLVideoElement;
+  video: HTMLMediaElement;
   sourceUrl: string;
   token: number;
   lastFrame?: HTMLCanvasElement;
@@ -26,7 +26,7 @@ const background = '#050301';
 const handleSize = 9;
 const MAX_PREVIEW_RENDER_HEIGHT = 720;
 
-function pauseDecoderVideo(video: HTMLVideoElement) {
+function pauseDecoderVideo(video: HTMLMediaElement) {
   if (!video.paused) video.pause();
   video.muted = true;
   video.volume = 0;
@@ -112,7 +112,8 @@ function getHandleAction(
   return null;
 }
 
-function captureVideoFrame(video: HTMLVideoElement, existing?: HTMLCanvasElement) {
+function captureVideoFrame(video: HTMLMediaElement, existing?: HTMLCanvasElement) {
+  if (!(video instanceof HTMLVideoElement)) return existing;
   if (video.readyState < 2 || video.videoWidth <= 0 || video.videoHeight <= 0) return existing;
   const frame = existing ?? document.createElement('canvas');
   if (frame.width !== video.videoWidth || frame.height !== video.videoHeight) {
@@ -161,6 +162,12 @@ function drawTextLayer(ctx: CanvasRenderingContext2D, layer: Layer) {
 function getActiveNonAudioLayers(layers: Layer[], currentTime: number) {
   return layers.filter(
     (layer) => layer.type !== 'audio' && currentTime >= layer.startTime && currentTime <= layer.endTime
+  );
+}
+
+function getActiveAudioLayers(layers: Layer[], currentTime: number) {
+  return layers.filter(
+    (layer) => layer.type === 'audio' && Boolean(layer.src) && currentTime >= layer.startTime && currentTime <= layer.endTime
   );
 }
 
@@ -232,7 +239,7 @@ export function useVideoCanvasController({
     return img;
   }, []);
 
-  const getVideo = useCallback((clipId: string, url: string) => {
+  const getVideo = useCallback((clipId: string, url: string, kind: 'video' | 'audio' = 'video') => {
     const cache = videoCacheRef.current;
     const cached = cache.get(clipId);
     if (cached && cached.sourceUrl === url) return cached;
@@ -242,12 +249,14 @@ export function useVideoCanvasController({
       cached.video.load();
       cache.delete(clipId);
     }
-    const video = document.createElement('video');
+    const video = kind === 'audio' ? document.createElement('audio') : document.createElement('video');
     video.preload = 'auto';
     video.crossOrigin = 'anonymous';
-    video.playsInline = true;
-    video.setAttribute('playsinline', 'true');
-    video.setAttribute('webkit-playsinline', 'true');
+    if (video instanceof HTMLVideoElement) {
+      video.playsInline = true;
+      video.setAttribute('playsinline', 'true');
+      video.setAttribute('webkit-playsinline', 'true');
+    }
     video.src = url;
     const entry: VideoDecoder = { video, sourceUrl: url, token: 0 };
     video.onloadeddata = () => {
@@ -328,17 +337,44 @@ export function useVideoCanvasController({
 
     const activeClips = getRenderableClipsForAssets(timelineClips, deployedAssetById, currentTime);
     const activeLayers = getActiveNonAudioLayers(layers, currentTime);
+    const activeAudioLayers = getActiveAudioLayers(layers, currentTime);
     const activeVideoCacheIds = new Set([
       ...activeClips.map((clip) => clip.id),
       ...activeLayers
         .filter((layer) => layer.type === 'video' && Boolean(layer.src))
         .map((layer) => `layer:${layer.id}`),
+      ...activeAudioLayers.map((layer) => `layer:${layer.id}`),
     ]);
     const renderItems = getTimelineStackItems(activeLayers, activeClips, canvasObjects).reverse();
 
     videoCacheRef.current.forEach((decoder, cacheId) => {
       if (activeVideoCacheIds.has(cacheId)) return;
       pauseDecoderVideo(decoder.video);
+    });
+
+    activeAudioLayers.forEach((layer) => {
+      if (!layer.src) return;
+      const decoder = getVideo(`layer:${layer.id}`, layer.src, 'audio');
+      const sourceStart = Number.isFinite(layer.mediaStart) ? layer.mediaStart ?? 0 : 0;
+      const desired = Math.max(0, sourceStart + currentTime - layer.startTime);
+      const audio = decoder.video;
+      const muted = Boolean(audioMuted || layer.mediaMuted);
+      audio.muted = muted;
+      audio.volume = muted ? 0 : 1;
+      audio.playbackRate = playbackRate;
+      const maxDrift = isPlaying ? 0.18 : 0.03;
+      if (Math.abs(audio.currentTime - desired) > maxDrift && Number.isFinite(desired)) {
+        try {
+          audio.currentTime = desired;
+        } catch {
+          // Audio metadata can still be loading on the first render; the next frame retries.
+        }
+      }
+      if (isPlaying && audio.paused) {
+        void audio.play().catch(() => undefined);
+      } else if (!isPlaying && !audio.paused) {
+        audio.pause();
+      }
     });
 
     renderItems.forEach((item) => {
@@ -373,7 +409,7 @@ export function useVideoCanvasController({
         } else if (!isPlaying && !video.paused) {
           video.pause();
         }
-        const source = video.readyState >= 2 && !video.seeking ? video : decoder.lastFrame ?? null;
+        const source = video instanceof HTMLVideoElement && video.readyState >= 2 && !video.seeking ? video : decoder.lastFrame ?? null;
         drawCanvasObject(ctx, object, source, 'Loading video');
         return;
       }
@@ -417,7 +453,7 @@ export function useVideoCanvasController({
           selected: false,
           drawOrder: layer.zIndex,
         };
-        const source = video.readyState >= 2 && !video.seeking ? video : decoder.lastFrame ?? null;
+        const source = video instanceof HTMLVideoElement && video.readyState >= 2 && !video.seeking ? video : decoder.lastFrame ?? null;
         drawCanvasObject(ctx, object, source, 'Loading video');
       } else if (layer.src) {
         const image = getImage(layer.id, layer.src);

@@ -5,6 +5,7 @@ import {
   calculateTimelineDuration,
   clampLayerTiming,
   clampPlayhead,
+  MIN_CLIP_DURATION,
   reorderTimelineStack,
 } from './timelineModel';
 
@@ -68,7 +69,11 @@ export function useLayerControllers(
   }
 
   function handleSelectLayer(id: string | null) {
-    set({ selectedLayerId: id });
+    set({
+      selectedLayerId: id,
+      selectedClipId: null,
+      selectedCanvasObjectId: null,
+    });
   }
 
   function handleLayerTimingChange(id: string, startTime: number, endTime: number) {
@@ -80,6 +85,55 @@ export function useLayerControllers(
       layers: nextLayers,
       duration,
       currentTime: clampPlayhead(state.currentTime, duration),
+    });
+  }
+
+  function handleSplitLayer(id: string) {
+    const target = state.layers.find((layer) => layer.id === id);
+    if (!target || target.type !== 'audio') return;
+
+    const duration = Math.max(0, target.endTime - target.startTime);
+    if (duration < MIN_CLIP_DURATION * 2) return;
+
+    const firstDuration = duration / 2;
+    const splitTime = target.startTime + firstDuration;
+    const sourceStart = Number.isFinite(target.mediaStart) ? target.mediaStart ?? 0 : 0;
+    const firstSourceEnd = sourceStart + firstDuration;
+    const timelineGroupId = target.timelineGroupId ?? target.id;
+    const secondLayer: Layer = {
+      ...target,
+      id: crypto.randomUUID(),
+      name: `${target.name} split`,
+      startTime: splitTime,
+      endTime: target.endTime,
+      mediaStart: firstSourceEnd,
+      mediaEnd: target.mediaEnd ?? sourceStart + duration,
+      timelineGroupId,
+    };
+    const firstLayer: Layer = {
+      ...target,
+      endTime: splitTime,
+      mediaStart: sourceStart,
+      mediaEnd: firstSourceEnd,
+      timelineGroupId,
+    };
+    const nextLayers = state.layers.flatMap((layer) => (layer.id === id ? [firstLayer, secondLayer] : layer));
+    const durationAfterSplit = projectDuration(nextLayers);
+    set({
+      layers: nextLayers,
+      selectedLayerId: secondLayer.id,
+      selectedClipId: null,
+      selectedCanvasObjectId: null,
+      duration: durationAfterSplit,
+      currentTime: splitTime,
+    });
+  }
+
+  function handleToggleLayerMute(id: string) {
+    set({
+      layers: state.layers.map((layer) => (
+        layer.id === id ? { ...layer, mediaMuted: !layer.mediaMuted } : layer
+      )),
     });
   }
 
@@ -130,6 +184,8 @@ export function useLayerControllers(
     handleDeleteLayer,
     handleSelectLayer,
     handleLayerTimingChange,
+    handleSplitLayer,
+    handleToggleLayerMute,
     handleLayerOrderChange,
     handleLayerStackOrderChange,
   };

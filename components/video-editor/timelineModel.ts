@@ -229,6 +229,10 @@ export function canSplitClip(clip: TimelineClip): boolean {
   return clip.type === 'video' && duration >= MIN_CLIP_DURATION * 2;
 }
 
+export function toggleClipMute(clips: TimelineClip[], clipId: string): TimelineClip[] {
+  return clips.map((clip) => (clip.id === clipId ? { ...clip, muted: !clip.muted } : clip));
+}
+
 export function splitClipAtMidpoint(
   clip: TimelineClip,
   secondClipId: string,
@@ -245,6 +249,7 @@ export function splitClipAtMidpoint(
   const secondDuration = safeDuration - firstDuration;
   const splitSourceTime = sourceStart + firstDuration;
   const timelineStart = Number.isFinite(clip.timelineStart) ? Math.max(0, clip.timelineStart) : 0;
+  const timelineGroupId = clip.timelineGroupId ?? clip.id;
 
   return [
     {
@@ -254,6 +259,7 @@ export function splitClipAtMidpoint(
       duration: firstDuration,
       timelineStart,
       selected: false,
+      timelineGroupId,
     },
     {
       ...clip,
@@ -264,6 +270,7 @@ export function splitClipAtMidpoint(
       duration: secondDuration,
       timelineStart: timelineStart + firstDuration,
       selected: true,
+      timelineGroupId,
     },
   ];
 }

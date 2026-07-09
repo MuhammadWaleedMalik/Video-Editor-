@@ -27,6 +27,7 @@ import {
   reorderTimelineStack,
   resizeImageClipEnd,
   splitClipAtMidpoint,
+  toggleClipMute,
   trimClipEnd,
   trimClipStart,
 } from './timelineModel';
@@ -77,6 +78,8 @@ export interface VideoEditorController {
   handleDeleteLayer: (id: string) => void;
   handleSelectLayer: (id: string | null) => void;
   handleLayerTimingChange: (id: string, startTime: number, endTime: number) => void;
+  handleSplitLayer: (id: string) => void;
+  handleToggleLayerMute: (id: string) => void;
   handleLayerOrderChange: (id: string, direction: 'front' | 'back') => void;
   handleLayerStackOrderChange: (id: string, targetIndex: number) => void;
   handleSelectClip: (id: string | null) => void;
@@ -347,6 +350,10 @@ export default function useVideoEditorController(): VideoEditorController {
         name: asset.originalFileName,
         src: asset.url,
         endTime: duration,
+        mediaMuted: false,
+        mediaStart: 0,
+        mediaEnd: duration,
+        timelineGroupId: newLayer.id,
       });
       const nextLayers = [...state.layers, nextLayer];
       const timelineDuration = calculateProjectDuration(state.timelineClips, nextLayers);
@@ -380,6 +387,7 @@ export default function useVideoEditorController(): VideoEditorController {
       muted: asset.type === 'video' ? false : true,
       volume: 1,
       selected: true,
+      timelineGroupId: clipId,
     });
     const clips = [...state.timelineClips.map((item) => ({ ...item, selected: false })), clip];
     const timelineDuration = calculateProjectDuration(clips);
@@ -542,7 +550,7 @@ export default function useVideoEditorController(): VideoEditorController {
     }
 
     const secondClipId = crypto.randomUUID();
-    const secondCanvasObjectId = target.canvasObjectId;
+    const secondCanvasObjectId = crypto.randomUUID();
     const splitClips = splitClipAtMidpoint(target, secondClipId, secondCanvasObjectId);
     if (!splitClips) {
       set({ uploadError: 'This video clip is too short to split.' });
@@ -550,21 +558,32 @@ export default function useVideoEditorController(): VideoEditorController {
     }
 
     const [firstClip, secondClip] = splitClips;
+    const maxDrawOrder = Math.max(0, ...state.canvasObjects.map((object) => object.drawOrder));
+    const secondObject: CanvasObject = {
+      ...sourceObject,
+      id: secondCanvasObjectId,
+      clipId: secondClipId,
+      selected: true,
+      drawOrder: maxDrawOrder + 1,
+    };
     const nextClips = state.timelineClips.flatMap((clip) => {
       if (clip.id !== id) return { ...clip, selected: false };
       return [firstClip, secondClip];
     });
-    const nextObjects = state.canvasObjects.map((object) => ({
-      ...object,
-      selected: object.id === sourceObject.id,
-    }));
+    const nextObjects = state.canvasObjects
+      .map((object) => (
+        object.id === sourceObject.id
+          ? { ...object, clipId: firstClip.id, selected: false }
+          : { ...object, selected: false }
+      ))
+      .concat(secondObject);
     const timelineDuration = calculateProjectDuration(nextClips);
 
     set({
       timelineClips: nextClips.map(fitClipToTimeline),
       canvasObjects: nextObjects,
       selectedClipId: secondClipId,
-      selectedCanvasObjectId: sourceObject.id,
+      selectedCanvasObjectId: secondCanvasObjectId,
       selectedLayerId: null,
       duration: timelineDuration,
       currentTime: secondClip.timelineStart,
@@ -574,7 +593,7 @@ export default function useVideoEditorController(): VideoEditorController {
 
   function handleToggleClipMute(id: string) {
     set({
-      timelineClips: state.timelineClips.map((clip) => (clip.id === id ? { ...clip, muted: !clip.muted } : clip)),
+      timelineClips: toggleClipMute(state.timelineClips, id),
     });
   }
 
@@ -658,6 +677,8 @@ export default function useVideoEditorController(): VideoEditorController {
     handleDeleteLayer: layers.handleDeleteLayer,
     handleSelectLayer: layers.handleSelectLayer,
     handleLayerTimingChange: layers.handleLayerTimingChange,
+    handleSplitLayer: layers.handleSplitLayer,
+    handleToggleLayerMute: layers.handleToggleLayerMute,
     handleLayerOrderChange: layers.handleLayerOrderChange,
     handleLayerStackOrderChange: layers.handleLayerStackOrderChange,
     handleSelectClip,

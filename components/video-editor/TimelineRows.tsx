@@ -1,6 +1,6 @@
 /* eslint-disable @next/next/no-img-element */
 
-import { memo, useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { AudioLines, GripVertical, Scissors, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { CanvasObject, Layer, MediaAsset, TimelineClip } from '@/types/editor';
 import { getTimelineStackItems, MIN_CLIP_DURATION } from './timelineModel';
@@ -39,6 +39,8 @@ interface TimelineRowsProps {
   onToggleClipMute: (id: string) => void;
   onDeleteClip: (id: string) => void;
   onDeleteLayer: (id: string) => void;
+  onSplitLayer: (id: string) => void;
+  onToggleLayerMute: (id: string) => void;
   stackDragPreview: {
     kind: 'clip' | 'layer';
     id: string;
@@ -51,17 +53,28 @@ interface TimelineRowsProps {
 interface ClipPreviewProps {
   asset?: MediaAsset;
   clip: TimelineClip;
+  timelinePixelWidth: number;
 }
 
 const IMAGE_TILE_INDICES = Array.from({ length: 8 }, (_, index) => index);
 const TIMELINE_FRAME_WIDTH = 120;
 const TIMELINE_FRAME_HEIGHT = 68;
+const TIMELINE_FRAME_TARGET_SPACING = 86;
 const TIMELINE_FRAME_BUILD_DELAY_MS = 120;
 const MAX_TIMELINE_FRAME_CACHE_SIZE = 64;
+const MAX_TIMELINE_FRAMES_PER_CLIP = 48;
 const TIMELINE_LABEL_MIN_WIDTH = 72;
 const READABLE_TICK_STEPS = [0.1, 0.2, 0.5, 1, 2, 5, 10, 15, 20, 30, 60, 120, 180, 300, 600];
 const timelineFrameCache = new Map<string, string[]>();
 const timelineFrameRequests = new Map<string, Promise<string[]>>();
+
+function getTimelineLayerRowKey(layer: Layer) {
+  return layer.type === 'audio' ? `audio-group:${layer.timelineGroupId ?? layer.id}` : `layer:${layer.id}`;
+}
+
+function getTimelineClipRowKey(clip: TimelineClip) {
+  return `clip-group:${clip.timelineGroupId ?? clip.canvasObjectId}`;
+}
 
 function getReadableTimelineTickStep(duration: number, timelineWidth: number) {
   const maxLabels = Math.max(2, Math.floor(timelineWidth / TIMELINE_LABEL_MIN_WIDTH));
@@ -70,13 +83,16 @@ function getReadableTimelineTickStep(duration: number, timelineWidth: number) {
 }
 
 function getFrameCacheKey(asset: MediaAsset, clip: TimelineClip, frameCount: number) {
+  return `${getFrameIdentityKey(asset, clip)}|${frameCount}`;
+}
+
+function getFrameIdentityKey(asset: MediaAsset, clip: TimelineClip) {
   return [
     asset.id,
     asset.url,
     clip.sourceStart.toFixed(3),
     clip.duration.toFixed(3),
     clip.sourceEnd.toFixed(3),
-    frameCount,
   ].join('|');
 }
 
@@ -205,41 +221,60 @@ const TimelineLayerPreview = memo(function TimelineLayerPreview({ layer }: { lay
   );
 });
 
-const TimelineClipPreview = memo(function TimelineClipPreview({ asset, clip }: ClipPreviewProps) {
-  const [frames, setFrames] = useState<string[]>([]);
+const TimelineClipPreview = memo(function TimelineClipPreview({ asset, clip, timelinePixelWidth }: ClipPreviewProps) {
+  const [frameState, setFrameState] = useState({ identityKey: '', cacheKey: '', frames: [] as string[] });
   const frameCount = useMemo(() => {
     const byDuration = Math.ceil(Math.max(clip.duration, 1) / 1.5);
-    return Math.max(4, Math.min(18, byDuration));
-  }, [clip.duration]);
+    const byWidth = Math.ceil(Math.max(timelinePixelWidth, TIMELINE_FRAME_TARGET_SPACING) / TIMELINE_FRAME_TARGET_SPACING);
+    return Math.max(4, Math.min(MAX_TIMELINE_FRAMES_PER_CLIP, Math.max(byDuration, byWidth)));
+  }, [clip.duration, timelinePixelWidth]);
+  const frameIdentityKey = asset && asset.status === 'deployed'
+    ? getFrameIdentityKey(asset, clip)
+    : '';
   const frameCacheKey = asset && asset.type === 'video' && asset.status === 'deployed'
     ? getFrameCacheKey(asset, clip, frameCount)
     : '';
+  const frames = frameState.identityKey === frameIdentityKey ? frameState.frames : [];
 
   useEffect(() => {
     let cancelled = false;
     if (!asset || asset.status !== 'deployed') {
-      setFrames([]);
+      setFrameState({ identityKey: '', cacheKey: '', frames: [] });
       return;
     }
     if (asset.type === 'image') {
-      setFrames((previous) => (previous.length === 1 && previous[0] === asset.url ? previous : [asset.url]));
+      setFrameState((previous) => (
+        previous.identityKey === frameIdentityKey && previous.frames.length === 1 && previous.frames[0] === asset.url
+          ? previous
+          : { identityKey: frameIdentityKey, cacheKey: frameIdentityKey, frames: [asset.url] }
+      ));
       return;
     }
 
     const cached = timelineFrameCache.get(frameCacheKey);
     if (cached) {
-      setFrames(cached);
+      setFrameState({ identityKey: frameIdentityKey, cacheKey: frameCacheKey, frames: cached });
       return;
     }
 
-    setFrames([]);
+    setFrameState((previous) => (
+      previous.identityKey === frameIdentityKey
+        ? previous
+        : { identityKey: frameIdentityKey, cacheKey: '', frames: [] }
+    ));
     const timeout = window.setTimeout(() => {
       requestTimelineFrames(asset, clip, frameCount)
         .then((nextFrames) => {
-          if (!cancelled) setFrames(nextFrames);
+          if (!cancelled) setFrameState({ identityKey: frameIdentityKey, cacheKey: frameCacheKey, frames: nextFrames });
         })
         .catch(() => {
-          if (!cancelled) setFrames([]);
+          if (!cancelled) {
+            setFrameState((previous) => (
+              previous.identityKey === frameIdentityKey
+                ? { identityKey: frameIdentityKey, cacheKey: '', frames: [] }
+                : previous
+            ));
+          }
         });
     }, TIMELINE_FRAME_BUILD_DELAY_MS);
 
@@ -247,7 +282,7 @@ const TimelineClipPreview = memo(function TimelineClipPreview({ asset, clip }: C
       cancelled = true;
       window.clearTimeout(timeout);
     };
-  }, [asset, clip, frameCacheKey, frameCount]);
+  }, [asset, clip, frameCacheKey, frameCount, frameIdentityKey]);
 
   if (!asset) {
     return <div className="absolute inset-0 bg-[#241508]" />;
@@ -272,9 +307,9 @@ const TimelineClipPreview = memo(function TimelineClipPreview({ asset, clip }: C
   }
 
   return (
-    <div className="absolute inset-0 flex">
+    <div key={frameState.cacheKey} className="absolute inset-0 flex animate-in fade-in duration-150">
       {frames.map((frame, index) => (
-        <img key={`${frame}-${index}`} src={frame} alt="" className="h-full min-w-[58px] flex-1 object-cover opacity-85" />
+        <img key={`${frameState.cacheKey}-${index}`} src={frame} alt="" className="h-full min-w-[58px] flex-1 object-cover opacity-85" />
       ))}
     </div>
   );
@@ -302,8 +337,12 @@ export default function TimelineRows({
   onToggleClipMute,
   onDeleteClip,
   onDeleteLayer,
+  onSplitLayer,
+  onToggleLayerMute,
   stackDragPreview,
 }: TimelineRowsProps) {
+  const [clipToolbarAnchor, setClipToolbarAnchor] = useState<{ clipId: string; time: number } | null>(null);
+  const [layerToolbarAnchor, setLayerToolbarAnchor] = useState<{ layerId: string; time: number } | null>(null);
   const assetById = useMemo(() => new Map(mediaAssets.map((asset) => [asset.id, asset])), [mediaAssets]);
   const stackItems = useMemo(
     () => getTimelineStackItems(layers, timelineClips, canvasObjects),
@@ -314,7 +353,7 @@ export default function TimelineRows({
     const rowIndexByKey = new Map<string, number>();
 
     stackItems.forEach((item) => {
-      const rowKey = item.kind === 'clip' ? `clip-object:${item.clip.canvasObjectId}` : `layer:${item.id}`;
+      const rowKey = item.kind === 'clip' ? getTimelineClipRowKey(item.clip) : getTimelineLayerRowKey(item.layer);
       const itemKey = item.kind === 'clip' ? `clip:${item.id}` : `layer:${item.id}`;
       const existingIndex = rowIndexByKey.get(rowKey);
       if (existingIndex !== undefined) {
@@ -352,6 +391,30 @@ export default function TimelineRows({
       : playheadTime >= dur - playheadEdgeBuffer
         ? 'translateX(calc(-100% - 6px))'
         : 'translateX(-50%)';
+  const getTimelineTimeFromClientX = useCallback((clientX: number) => {
+    const rect = timelineLaneRef.current?.getBoundingClientRect();
+    if (!rect) return null;
+    const ratio = (clientX - rect.left) / Math.max(1, rect.width);
+    return Math.max(0, Math.min(dur, ratio * dur));
+  }, [dur, timelineLaneRef]);
+  const anchorClipToolbar = useCallback((clip: TimelineClip, clientX: number) => {
+    const pointerTime = getTimelineTimeFromClientX(clientX);
+    const clipStart = Math.max(0, clip.timelineStart);
+    const clipEnd = clipStart + Math.max(0, clip.duration);
+    setClipToolbarAnchor({
+      clipId: clip.id,
+      time: Math.max(clipStart, Math.min(clipEnd, pointerTime ?? clipStart)),
+    });
+  }, [getTimelineTimeFromClientX]);
+  const anchorLayerToolbar = useCallback((layer: Layer, clientX: number) => {
+    const pointerTime = getTimelineTimeFromClientX(clientX);
+    const layerStart = Math.max(0, layer.startTime);
+    const layerEnd = Math.max(layerStart, layer.endTime);
+    setLayerToolbarAnchor({
+      layerId: layer.id,
+      time: Math.max(layerStart, Math.min(layerEnd, pointerTime ?? layerStart)),
+    });
+  }, [getTimelineTimeFromClientX]);
   const selectedClip = useMemo(
     () => timelineClips.find((clip) => clip.id === selectedClipId) ?? null,
     [selectedClipId, timelineClips]
@@ -362,19 +425,39 @@ export default function TimelineRows({
   );
   const selectedClipRowIndex = selectedClip ? rowIndexByItemKey.get(`clip:${selectedClip.id}`) ?? -1 : -1;
   const selectedLayerRowIndex = selectedLayer ? rowIndexByItemKey.get(`layer:${selectedLayer.id}`) ?? -1 : -1;
-  const selectedClipCenterTime = selectedClip ? selectedClip.timelineStart + Math.max(0, selectedClip.duration) / 2 : 0;
-  const selectedLayerCenterTime = selectedLayer ? selectedLayer.startTime + Math.max(0, selectedLayer.endTime - selectedLayer.startTime) / 2 : 0;
+  const selectedClipStartTime = selectedClip ? Math.max(0, selectedClip.timelineStart) : 0;
+  const selectedClipEndTime = selectedClip ? selectedClipStartTime + Math.max(0, selectedClip.duration) : 0;
+  const selectedClipToolbarTime = selectedClip
+    ? Math.max(
+      selectedClipStartTime,
+      Math.min(
+        selectedClipEndTime,
+        clipToolbarAnchor?.clipId === selectedClip.id ? clipToolbarAnchor.time : selectedClipStartTime
+      )
+    )
+    : 0;
+  const selectedLayerStartTime = selectedLayer ? Math.max(0, selectedLayer.startTime) : 0;
+  const selectedLayerEndTime = selectedLayer ? Math.max(selectedLayerStartTime, selectedLayer.endTime) : 0;
+  const selectedLayerToolbarTime = selectedLayer
+    ? Math.max(
+      selectedLayerStartTime,
+      Math.min(
+        selectedLayerEndTime,
+        layerToolbarAnchor?.layerId === selectedLayer.id ? layerToolbarAnchor.time : selectedLayerStartTime
+      )
+    )
+    : 0;
   const toolbarEdgeBuffer = Math.max(0.25, dur * 0.02);
   const selectedClipToolbarTransform =
-    selectedClipCenterTime <= toolbarEdgeBuffer
+    selectedClipToolbarTime <= toolbarEdgeBuffer
       ? 'translateX(6px)'
-      : selectedClipCenterTime >= dur - toolbarEdgeBuffer
+      : selectedClipToolbarTime >= dur - toolbarEdgeBuffer
         ? 'translateX(calc(-100% - 6px))'
         : 'translateX(-50%)';
   const selectedLayerToolbarTransform =
-    selectedLayerCenterTime <= toolbarEdgeBuffer
+    selectedLayerToolbarTime <= toolbarEdgeBuffer
       ? 'translateX(6px)'
-      : selectedLayerCenterTime >= dur - toolbarEdgeBuffer
+      : selectedLayerToolbarTime >= dur - toolbarEdgeBuffer
         ? 'translateX(calc(-100% - 6px))'
         : 'translateX(-50%)';
   const draggedStackItem = useMemo(
@@ -503,7 +586,7 @@ export default function TimelineRows({
             <div
               className="absolute z-[60] flex max-w-[calc(100vw-5.5rem)] items-center gap-1 overflow-hidden rounded-xl border border-[#5a3f11] bg-[#1a0c05]/95 p-1 text-[#fff0a6] shadow-[0_14px_30px_rgba(0,0,0,0.45),0_0_18px_rgba(242,212,11,0.16)] backdrop-blur"
               style={{
-                left: timeToPercent(selectedClipCenterTime),
+                left: timeToPercent(selectedClipToolbarTime),
                 top: `${Math.max(6, rowTopOffset + selectedClipRowIndex * rowGap - 42)}px`,
                 transform: selectedClipToolbarTransform,
               }}
@@ -569,7 +652,7 @@ export default function TimelineRows({
             <div
               className="absolute z-[60] flex max-w-[calc(100vw-5.5rem)] items-center gap-1 overflow-hidden rounded-xl border border-[#5a3f11] bg-[#1a0c05]/95 p-1 text-[#fff0a6] shadow-[0_14px_30px_rgba(0,0,0,0.45),0_0_18px_rgba(242,212,11,0.16)] backdrop-blur"
               style={{
-                left: timeToPercent(selectedLayerCenterTime),
+                left: timeToPercent(selectedLayerToolbarTime),
                 top: `${Math.max(6, rowTopOffset + selectedLayerRowIndex * rowGap - 42)}px`,
                 transform: selectedLayerToolbarTransform,
               }}
@@ -591,6 +674,45 @@ export default function TimelineRows({
                 <Trash2 size={14} />
                 <span className="hidden text-[10px] font-bold uppercase tracking-[0.12em] sm:inline">Delete</span>
               </button>
+              {selectedLayer.type === 'audio' ? (
+                <button
+                  type="button"
+                  disabled={selectedLayer.endTime - selectedLayer.startTime < MIN_CLIP_DURATION * 2}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (selectedLayer.endTime - selectedLayer.startTime >= MIN_CLIP_DURATION * 2) {
+                      onSplitLayer(selectedLayer.id);
+                    }
+                  }}
+                  className={`flex min-h-9 min-w-9 items-center justify-center gap-1 rounded-lg px-2 ring-1 ${
+                    selectedLayer.endTime - selectedLayer.startTime >= MIN_CLIP_DURATION * 2
+                      ? 'bg-[#241b05] text-[#fff0a6] ring-[#f2d40b]/30 hover:bg-[#f2d40b] hover:text-[#1a0c05]'
+                      : 'cursor-not-allowed bg-black/35 text-[#6f6040] ring-white/10'
+                  }`}
+                  title={selectedLayer.endTime - selectedLayer.startTime >= MIN_CLIP_DURATION * 2 ? 'Split audio into two equal parts' : 'Audio must be at least 6s to split'}
+                  aria-label="Split audio layer"
+                >
+                  <Scissors size={14} />
+                  <span className="hidden text-[10px] font-bold uppercase tracking-[0.12em] sm:inline">Split</span>
+                </button>
+              ) : null}
+              {selectedLayer.type === 'audio' ? (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleLayerMute(selectedLayer.id);
+                  }}
+                  className="flex min-h-9 min-w-9 items-center justify-center gap-1 rounded-lg bg-[#241b05] px-2 text-[#fff0a6] ring-1 ring-[#f2d40b]/25 hover:bg-[#f2d40b] hover:text-[#1a0c05]"
+                  title={selectedLayer.mediaMuted ? 'Unmute audio' : 'Mute audio'}
+                  aria-label={selectedLayer.mediaMuted ? 'Unmute audio' : 'Mute audio'}
+                >
+                  {selectedLayer.mediaMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+                  <span className="hidden text-[10px] font-bold uppercase tracking-[0.12em] sm:inline">
+                    {selectedLayer.mediaMuted ? 'Unmute' : 'Mute'}
+                  </span>
+                </button>
+              ) : null}
             </div>
           ) : null}
 
@@ -634,14 +756,18 @@ export default function TimelineRows({
                     transform: isStackDragging ? 'scale(0.98)' : 'scale(1)',
                     boxShadow: isStackDragging ? 'inset 0 0 0 2px rgba(242,212,11,0.55)' : undefined,
                   }}
-                  onPointerDown={(e) => onClipPointerDown(e, clip, 'move')}
+                  onPointerDown={(e) => {
+                    anchorClipToolbar(clip, e.clientX);
+                    onClipPointerDown(e, clip, 'move');
+                  }}
                   onClick={(e) => {
                     e.stopPropagation();
+                    anchorClipToolbar(clip, e.clientX);
                     onSelectClip(clip.id);
                   }}
                   title={`${clip.timelineStart.toFixed(2)}s-${clipEnd.toFixed(2)}s`}
                 >
-                  <TimelineClipPreview asset={asset} clip={clip} />
+                  <TimelineClipPreview asset={asset} clip={clip} timelinePixelWidth={clipPixelWidth} />
                   <div className="absolute inset-0 bg-black/35" />
                   {isVideo || isImage ? (
                     <>
@@ -720,9 +846,13 @@ export default function TimelineRows({
                   transform: isStackDragging ? 'scale(0.98)' : 'scale(1)',
                   boxShadow: isStackDragging ? 'inset 0 0 0 2px rgba(242,212,11,0.55)' : undefined,
                 }}
-                onPointerDown={(e) => onLayerPointerDown(e, layer, 'move')}
+                onPointerDown={(e) => {
+                  anchorLayerToolbar(layer, e.clientX);
+                  onLayerPointerDown(e, layer, 'move');
+                }}
                 onClick={(e) => {
                   e.stopPropagation();
+                  anchorLayerToolbar(layer, e.clientX);
                   onSelectLayer(layer.id);
                 }}
                 title={`${layer.startTime.toFixed(2)}s-${layer.endTime.toFixed(2)}s`}

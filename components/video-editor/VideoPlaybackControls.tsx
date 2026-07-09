@@ -31,23 +31,22 @@ export default function VideoPlaybackControls({
   onSeek,
   onSpeedChange,
 }: VideoPlaybackControlsProps) {
-  const scrubberRef = useRef<HTMLDivElement>(null);
+  const scrubberTrackRef = useRef<HTMLDivElement>(null);
   const trimmedTime = Math.max(0, currentTime - trimStart);
   const trimmedDuration = Math.max(0, trimEnd - trimStart);
   const scrubberProgress = trimmedDuration > 0 ? Math.max(0, Math.min(1, trimmedTime / trimmedDuration)) : 0;
 
   const seekFromClientX = useCallback((clientX: number) => {
-    const scrubber = scrubberRef.current;
-    if (!scrubber || trimmedDuration <= 0) return;
-    const rect = scrubber.getBoundingClientRect();
+    const track = scrubberTrackRef.current;
+    if (!track || trimmedDuration <= 0) return;
+    const rect = track.getBoundingClientRect();
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / Math.max(rect.width, 1)));
     onSeek(trimStart + ratio * trimmedDuration);
   }, [onSeek, trimStart, trimmedDuration]);
 
   function handleScrubberPointerDown(e: React.PointerEvent<HTMLDivElement>) {
     e.preventDefault();
-    const scrubber = scrubberRef.current;
-    scrubber?.setPointerCapture(e.pointerId);
+    e.currentTarget.setPointerCapture(e.pointerId);
     seekFromClientX(e.clientX);
   }
 
@@ -65,7 +64,6 @@ export default function VideoPlaybackControls({
   return (
     <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-t border-[#3d2510]/60 px-1 pt-2 pb-[env(safe-area-inset-bottom)] sm:gap-3">
       <div
-        ref={scrubberRef}
         className="relative order-first h-8 basis-full cursor-ew-resize touch-none py-3"
         onPointerDown={handleScrubberPointerDown}
         onPointerMove={handleScrubberPointerMove}
@@ -73,7 +71,7 @@ export default function VideoPlaybackControls({
         onPointerCancel={handleScrubberPointerUp}
         title="Drag to seek"
       >
-        <div className="h-2 rounded-full bg-[#2d1a08]">
+        <div ref={scrubberTrackRef} className="h-2 rounded-full bg-[#2d1a08]">
           <div
             className="relative h-full rounded-full bg-[#c9b600]"
             style={{ width: `${scrubberProgress * 100}%` }}

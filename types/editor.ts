@@ -56,6 +56,7 @@ export interface TimelineClip {
   selected: boolean;
   locked?: boolean;
   hidden?: boolean;
+  timelineGroupId?: string;
 }
 
 export interface CanvasObject {
@@ -95,6 +96,9 @@ export interface Layer {
   themeId?: string;   // optional reusable text theme id
   src?: string;       // URL (object URL or placeholder)
   mediaMuted?: boolean; // Video layer mute state
+  mediaStart?: number; // Source offset for trimmed/split media layers
+  mediaEnd?: number;
+  timelineGroupId?: string;
 }
 
 export interface EditorState {

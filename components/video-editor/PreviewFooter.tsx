@@ -31,13 +31,13 @@ export default function PreviewFooter({
   onExportSrt,
   onExportVtt,
 }: PreviewFooterProps) {
-  const seekBarRef = useRef<HTMLDivElement>(null);
+  const seekTrackRef = useRef<HTMLDivElement>(null);
 
   const seekFromClientX = useCallback((clientX: number) => {
-    const seekBar = seekBarRef.current;
-    if (!seekBar) return;
-    const bar = seekBar.getBoundingClientRect();
-    const ratio = Math.max(0, Math.min(1, (clientX - bar.left) / Math.max(bar.width, 1)));
+    const seekTrack = seekTrackRef.current;
+    if (!seekTrack) return;
+    const rect = seekTrack.getBoundingClientRect();
+    const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / Math.max(rect.width, 1)));
     onSeek(startAt + ratio * Math.max(totalDuration, 0.001));
   }, [onSeek, startAt, totalDuration]);
 
@@ -61,14 +61,13 @@ export default function PreviewFooter({
   return (
     <div className="flex shrink-0 flex-col gap-2 px-3 py-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] sm:px-4">
       <div
-        ref={seekBarRef}
         className="h-8 touch-none cursor-pointer py-3"
         onPointerDown={handleSeekPointerDown}
         onPointerMove={handleSeekPointerMove}
         onPointerUp={handleSeekPointerUp}
         onPointerCancel={handleSeekPointerUp}
       >
-        <div className="h-2 rounded-full bg-[#2d1a08]">
+        <div ref={seekTrackRef} className="h-2 rounded-full bg-[#2d1a08]">
         <div
           className="relative h-full rounded-full bg-[#c9b600] transition-all"
           style={{ width: `${progress * 100}%` }}
