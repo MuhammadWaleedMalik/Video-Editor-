@@ -284,6 +284,7 @@ export default function VideoEditor() {
         onClipOrderChange={editor.handleClipOrderChange}
         onToggleClipMute={editor.handleToggleClipMute}
         onDeleteClip={editor.handleDeleteClip}
+        onOpenItemEditor={() => setMobilePanel('settings')}
       />
 
       {showPreviewConfirm ? (

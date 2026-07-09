@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { AudioLines, GripVertical, Scissors, Trash2, Volume2, VolumeX } from 'lucide-react';
+import { AudioLines, GripVertical, Scissors, Settings2, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { CanvasObject, Layer, MediaAsset, TimelineClip } from '@/types/editor';
 import { getTimelineStackItems, MIN_CLIP_DURATION } from './timelineModel';
 import { formatTick, getTimelineMinorTickStep, getTimelineTickStep, getTimelineTicks } from './timelineUtils';
@@ -41,6 +41,7 @@ interface TimelineRowsProps {
   onDeleteLayer: (id: string) => void;
   onSplitLayer: (id: string) => void;
   onToggleLayerMute: (id: string) => void;
+  onOpenItemEditor?: () => void;
   stackDragPreview: {
     kind: 'clip' | 'layer';
     id: string;
@@ -339,6 +340,7 @@ export default function TimelineRows({
   onDeleteLayer,
   onSplitLayer,
   onToggleLayerMute,
+  onOpenItemEditor,
   stackDragPreview,
 }: TimelineRowsProps) {
   const [clipToolbarAnchor, setClipToolbarAnchor] = useState<{ clipId: string; time: number } | null>(null);
@@ -475,10 +477,10 @@ export default function TimelineRows({
 
   return (
     <>
-      <div className="sticky top-8 z-[100] -mx-1 mb-3 rounded-2xl bg-[#18120a]/98 px-1 pb-2 pt-1 shadow-[0_16px_34px_rgba(0,0,0,0.45)] backdrop-blur">
+      <div className="sticky top-8 z-30 -mx-1 mb-3 rounded-2xl bg-[#18120a]/98 px-1 pb-2 pt-1 shadow-[0_16px_34px_rgba(0,0,0,0.45)] backdrop-blur">
         <TrackRow label="Time" contentWidth={timelineWidth} heightClassName="h-12">
           <div
-            className="relative z-[105] h-12 touch-none cursor-ew-resize rounded-xl bg-[#0d0803] p-1 shadow-[inset_0_-1px_0_rgba(242,212,11,0.22)]"
+            className="relative z-30 h-12 touch-none cursor-ew-resize rounded-xl bg-[#0d0803] p-1 shadow-[inset_0_-1px_0_rgba(242,212,11,0.22)]"
             style={{ minWidth: `${timelineWidth}px` }}
             onPointerDown={onTimelinePointerDown}
             title="Drag to scrub the timeline"
@@ -490,14 +492,14 @@ export default function TimelineRows({
               timelineWidth={timelineWidth}
             />
             <div
-              className="pointer-events-none absolute bottom-1 top-1 z-[120] w-0"
+              className="pointer-events-none absolute bottom-1 top-1 z-40 w-0"
               style={{ left: playheadPercent }}
             >
               <div className="absolute left-1/2 top-0 h-full w-[3px] -translate-x-1/2 rounded-full bg-[#f2d40b] shadow-[0_0_18px_rgba(242,212,11,0.85)]" />
               <div className="absolute bottom-0 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 rounded-[3px] bg-[#f2d40b] shadow-[0_0_14px_rgba(242,212,11,0.65)]" />
             </div>
             <span
-              className="pointer-events-none absolute top-0 z-[125] whitespace-nowrap rounded-full border border-[#f2d40b] bg-[#1a0c05] px-2 py-1 font-mono text-[10px] font-black leading-none text-[#fff6b0] shadow-[0_8px_18px_rgba(0,0,0,0.45),0_0_14px_rgba(242,212,11,0.32)]"
+              className="pointer-events-none absolute top-0 z-40 whitespace-nowrap rounded-full border border-[#f2d40b] bg-[#1a0c05] px-2 py-1 font-mono text-[10px] font-black leading-none text-[#fff6b0] shadow-[0_8px_18px_rgba(0,0,0,0.45),0_0_14px_rgba(242,212,11,0.32)]"
               style={{ left: playheadPercent, transform: playheadLabelTransform }}
             >
               {formatTick(playheadTime)}
@@ -815,6 +817,27 @@ export default function TimelineRows({
                   >
                     <GripVertical size={16} />
                   </button>
+                  <button
+                    type="button"
+                    onPointerDown={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      anchorClipToolbar(clip, e.clientX);
+                      onSelectClip(clip.id);
+                      onOpenItemEditor?.();
+                    }}
+                    className={`absolute z-30 flex touch-manipulation items-center justify-center border border-[#f2d40b]/45 bg-[#120a02]/90 text-[#f2d40b] shadow-[0_8px_18px_rgba(0,0,0,0.34)] transition-transform active:scale-95 hover:bg-[#f2d40b] hover:text-[#1a0c05] ${
+                      compactClip ? 'right-1 top-1 h-6 w-6 rounded' : 'right-2 top-2 h-8 w-8 rounded-lg'
+                    }`}
+                    title="Open object editor"
+                    aria-label="Open object editor"
+                  >
+                    <Settings2 size={compactClip ? 13 : 15} />
+                  </button>
                   <div className="relative z-10 h-full min-w-0" />
                 </div>
               );
@@ -876,6 +899,27 @@ export default function TimelineRows({
                   title="Drag to change stack order"
                 >
                   <GripVertical size={16} />
+                </button>
+                <button
+                  type="button"
+                  onPointerDown={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    anchorLayerToolbar(layer, e.clientX);
+                    onSelectLayer(layer.id);
+                    onOpenItemEditor?.();
+                  }}
+                  className={`absolute z-30 flex touch-manipulation items-center justify-center border border-[#f2d40b]/45 bg-[#120a02]/90 text-[#f2d40b] shadow-[0_8px_18px_rgba(0,0,0,0.34)] transition-transform active:scale-95 hover:bg-[#f2d40b] hover:text-[#1a0c05] ${
+                    compactLayer ? 'right-1 top-1 h-6 w-6 rounded' : 'right-2 top-2 h-8 w-8 rounded-lg'
+                  }`}
+                  title="Open object editor"
+                  aria-label="Open object editor"
+                >
+                  <Settings2 size={compactLayer ? 13 : 15} />
                 </button>
                 <div
                   className={`${compactLayer ? 'w-2' : 'w-5 sm:w-4'} absolute right-0 top-0 z-10 h-full touch-none cursor-ew-resize bg-[#f2d40b]/70`}

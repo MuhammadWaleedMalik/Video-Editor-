@@ -93,6 +93,32 @@ export function sourceTimeForClip(clip: TimelineClip, currentTime: number): numb
   return clip.sourceStart + Math.max(0, currentTime - clip.timelineStart);
 }
 
+export function getFirstPlayableTime(
+  clips: Pick<TimelineClip, 'timelineStart' | 'duration' | 'hidden'>[],
+  layers: Pick<Layer, 'startTime' | 'endTime'>[],
+  fromTime = 0
+): number {
+  const safeFrom = Number.isFinite(fromTime) ? Math.max(0, fromTime) : 0;
+  const candidates = [
+    ...clips
+      .filter((clip) => !clip.hidden && Math.max(0, clip.duration) > 0)
+      .map((clip) => {
+        const start = Math.max(0, clip.timelineStart);
+        const end = start + Math.max(0, clip.duration);
+        return safeFrom >= start && safeFrom < end ? safeFrom : start;
+      }),
+    ...layers
+      .filter((layer) => Math.max(0, layer.endTime - layer.startTime) > 0)
+      .map((layer) => {
+        const start = Math.max(0, layer.startTime);
+        const end = Math.max(start, layer.endTime);
+        return safeFrom >= start && safeFrom < end ? safeFrom : start;
+      }),
+  ].filter((time) => time >= safeFrom);
+
+  return candidates.length ? Math.min(...candidates) : safeFrom;
+}
+
 export function shouldRenderAsset(asset?: MediaAsset): asset is MediaAsset {
   return Boolean(asset && asset.type !== 'audio' && asset.status === 'deployed' && asset.metadataLoaded);
 }

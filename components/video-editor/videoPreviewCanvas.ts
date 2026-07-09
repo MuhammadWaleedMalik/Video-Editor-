@@ -16,6 +16,7 @@ interface VideoDecoder {
   sourceUrl: string;
   token: number;
   lastFrame?: HTMLCanvasElement;
+  forceMutedForPlayback?: boolean;
 }
 type VideoCache = Map<string, VideoDecoder>;
 type DragHit =
@@ -30,6 +31,20 @@ function pauseDecoderVideo(video: HTMLMediaElement) {
   if (!video.paused) video.pause();
   video.muted = true;
   video.volume = 0;
+}
+
+function playDecoderMedia(decoder: VideoDecoder) {
+  const media = decoder.video;
+  const playAttempt = media.play();
+  if (!playAttempt?.catch) return;
+
+  playAttempt.catch(() => {
+    if (!(media instanceof HTMLVideoElement) || media.muted) return;
+    decoder.forceMutedForPlayback = true;
+    media.muted = true;
+    media.volume = 0;
+    void media.play().catch(() => undefined);
+  });
 }
 
 function cursorForAction(action: LayerDragAction | null) {
@@ -371,7 +386,7 @@ export function useVideoCanvasController({
         }
       }
       if (isPlaying && audio.paused) {
-        void audio.play().catch(() => undefined);
+        playDecoderMedia(decoder);
       } else if (!isPlaying && !audio.paused) {
         audio.pause();
       }
@@ -391,7 +406,7 @@ export function useVideoCanvasController({
         const decoder = getVideo(clip.id, asset.url);
         const desired = sourceTimeForClip(clip, currentTime);
         const video = decoder.video;
-        const muted = Boolean(audioMuted || clip.muted);
+        const muted = Boolean(audioMuted || clip.muted || decoder.forceMutedForPlayback);
         video.muted = muted;
         video.volume = muted ? 0 : Math.max(0, Math.min(1, clip.volume));
         video.playbackRate = playbackRate;
@@ -405,7 +420,7 @@ export function useVideoCanvasController({
           }
         }
         if (isPlaying && video.paused) {
-          void video.play().catch(() => undefined);
+          playDecoderMedia(decoder);
         } else if (!isPlaying && !video.paused) {
           video.pause();
         }
@@ -421,7 +436,7 @@ export function useVideoCanvasController({
         const decoder = getVideo(`layer:${layer.id}`, layer.src);
         const desired = Math.max(0, currentTime - layer.startTime);
         const video = decoder.video;
-        const muted = Boolean(audioMuted || layer.mediaMuted);
+        const muted = Boolean(audioMuted || layer.mediaMuted || decoder.forceMutedForPlayback);
         video.muted = muted;
         video.volume = muted ? 0 : 1;
         video.playbackRate = playbackRate;
@@ -435,7 +450,7 @@ export function useVideoCanvasController({
           }
         }
         if (isPlaying && video.paused) {
-          void video.play().catch(() => undefined);
+          playDecoderMedia(decoder);
         } else if (!isPlaying && !video.paused) {
           video.pause();
         }

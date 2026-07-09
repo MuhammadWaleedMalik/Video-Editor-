@@ -32,6 +32,7 @@ const {
   canSplitClip,
   clampPlayhead,
   fitClipToTimeline,
+  getFirstPlayableTime,
   getRenderableClips,
   getTimelineStackItems,
   moveClip,
@@ -268,6 +269,10 @@ assert.equal(reorderedStack.layers.find((item) => item.id === 'text-high').zInde
 assert.equal(reorderedStack.canvasObjects.find((item) => item.id === 'object-mid').drawOrder, 1);
 
 assert.equal(sourceTimeForClip(clip({ timelineStart: 5, sourceStart: 12 }), 8), 15);
+assert.equal(getFirstPlayableTime([clip({ timelineStart: 10, duration: 5 })], [], 0), 10);
+assert.equal(getFirstPlayableTime([clip({ timelineStart: 10, duration: 5 })], [], 12), 12);
+assert.equal(getFirstPlayableTime([clip({ timelineStart: 10, duration: 5 })], [layer({ startTime: 4, endTime: 8 })], 0), 4);
+assert.equal(getFirstPlayableTime([clip({ timelineStart: 10, duration: 5 })], [], 16), 16);
 assert.equal(clampPlayhead(50, 20), 20);
 assert.equal(moveClip(clip({ sourceStart: 10, sourceEnd: 20, duration: 10 }), 30).sourceStart, 10);
 assert.equal(calculateTimelineDuration([moveClip(clip({ duration: 20 }), 30)]), 50);

@@ -165,11 +165,11 @@ function ColorPopupField({ label, value, displayValue, onChange }: ColorPopupFie
       </button>
       {open ? (
         <div
-          className="fixed inset-0 z-50 flex items-end justify-center overscroll-contain bg-black/45 p-3 backdrop-blur-[2px] sm:items-center"
+          className="fixed inset-0 z-[90] flex items-center justify-center overscroll-contain bg-black/35 p-3 backdrop-blur-[2px]"
           onPointerDown={() => setOpen(false)}
         >
           <div
-            className="w-full max-w-sm rounded-2xl border border-[#4a3010] bg-[#120a02] p-3 shadow-[0_22px_56px_rgba(0,0,0,0.72),0_0_22px_rgba(201,182,0,0.16)] sm:p-4"
+            className="max-h-[min(88svh,560px)] w-full max-w-sm overflow-y-auto rounded-2xl border border-[#4a3010] bg-[#120a02] p-3 shadow-[0_22px_56px_rgba(0,0,0,0.72),0_0_22px_rgba(201,182,0,0.16)] scrollbar-thin sm:p-4"
             onPointerDown={(event) => event.stopPropagation()}
           >
             <div className="mb-3 flex items-center justify-between gap-3">
@@ -186,7 +186,7 @@ function ColorPopupField({ label, value, displayValue, onChange }: ColorPopupFie
               </button>
             </div>
 
-            <div className="mb-3 grid grid-cols-[64px_1fr] gap-3 rounded-xl border border-[#3d2510] bg-[#1a0c05] p-3">
+            <div className="mb-3 grid grid-cols-1 gap-3 rounded-xl border border-[#3d2510] bg-[#1a0c05] p-3 min-[360px]:grid-cols-[64px_1fr]">
               <span
                 className="h-16 w-16 rounded-xl border border-white/15 shadow-inner"
                 style={{ backgroundColor: safeValue }}
@@ -271,7 +271,7 @@ export default function LayerTextStyleFields({ layer, onUpdate }: LayerTextStyle
 
       <div className="flex flex-col gap-1">
         <label className="text-[9px] text-[#5a4530]">Theme</label>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
           {TEXT_THEMES.map((theme: TextTheme) => {
             const isActive = layer.fontFamily === theme.fontFamily || layer.themeId === theme.id;
             return (
@@ -333,7 +333,7 @@ export default function LayerTextStyleFields({ layer, onUpdate }: LayerTextStyle
 
       <label className="flex flex-col gap-1">
         <span className="text-[9px] text-[#5a4530]">Background Color</span>
-        <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
           <ColorPopupField
             label="Background"
             value={layer.bgColor === '#00000000' ? '#000000' : layer.bgColor || '#000000'}
@@ -349,7 +349,7 @@ export default function LayerTextStyleFields({ layer, onUpdate }: LayerTextStyle
                 onUpdate({ ...layer, bgColor: '#000000' });
               }
             }}
-            className="bg-[#1f1005] border border-[#3d2510] rounded-lg px-2 py-1 text-xs text-[#e8d5a0] outline-none"
+            className="min-h-10 w-full rounded-lg border border-[#3d2510] bg-[#1f1005] px-2 py-1 text-xs text-[#e8d5a0] outline-none sm:w-auto"
           >
             <option value="transparent">Transparent</option>
             <option value="custom">Solid / Custom Color</option>

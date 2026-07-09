@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { EditorState, VideoFormat } from '@/types/editor';
-import { clampPlayhead, clampProjectDuration } from './timelineModel';
+import { clampPlayhead, clampProjectDuration, getFirstPlayableTime } from './timelineModel';
 
 const PREVIEW_PLAYBACK_FPS = 30;
 const PREVIEW_PLAYBACK_FRAME_MS = 1000 / PREVIEW_PLAYBACK_FPS;
@@ -89,7 +89,9 @@ export function usePlaybackControllers(
       set({ currentTime: 0, isPlaying: false });
       return;
     }
-    const seekTo = state.currentTime >= timelineDuration ? 0 : clampPlayhead(state.currentTime, timelineDuration);
+    const requestedTime = state.currentTime >= timelineDuration ? 0 : clampPlayhead(state.currentTime, timelineDuration);
+    const firstPlayableTime = getFirstPlayableTime(state.timelineClips, state.layers, requestedTime);
+    const seekTo = clampPlayhead(firstPlayableTime, timelineDuration);
     currentTimeRef.current = seekTo;
     if (videoRef.current) videoRef.current.currentTime = seekTo;
     set({ currentTime: seekTo, isPlaying: true });

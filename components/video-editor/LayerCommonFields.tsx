@@ -26,7 +26,7 @@ export default function LayerCommonFields({
       </div>
 
       <div className="flex flex-col gap-2">
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <label className="flex flex-col gap-1">
             <span className="text-[9px] text-[#5a4530]">X Position (%)</span>
             <input
@@ -51,7 +51,7 @@ export default function LayerCommonFields({
           </label>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <label className="flex flex-col gap-1">
             <span className="text-[9px] text-[#5a4530]">Width (%)</span>
             <input
@@ -76,7 +76,7 @@ export default function LayerCommonFields({
           </label>
         </div>
 
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           <label className="flex flex-col gap-1">
             <span className="text-[9px] text-[#5a4530]">Show From (s)</span>
             <input

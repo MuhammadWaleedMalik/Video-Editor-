@@ -110,7 +110,7 @@ export default function SubtitlesPanel({
           </span>
         </div>
         <div className="flex flex-col gap-5 p-4 sm:p-5">
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             {(['x', 'y', 'width', 'height'] as const).map((field) => (
               <label key={field} className="flex flex-col gap-1">
                 <span className="text-[9px] uppercase text-[#5a4530]">
