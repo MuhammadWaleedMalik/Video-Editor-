@@ -95,8 +95,8 @@ export default function SubtitlesPanel({
     };
 
     return (
-      <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-y-auto border-t border-[#3d2510] bg-[#120a02] scrollbar-thin md:border-l md:border-t-0">
-        <div className="flex shrink-0 items-center gap-2 border-b border-[#3d2510] px-5 py-4">
+      <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-y-auto overscroll-contain border-t border-[#3d2510] bg-[#120a02] scrollbar-thin xl:border-l xl:border-t-0">
+        <div className="flex shrink-0 items-center gap-2 border-b border-[#3d2510] px-4 py-3 sm:px-5 sm:py-4">
           <button
             onClick={() => onSelectClip(null)}
             className="p-1 text-[#7a6040] transition-colors hover:text-[#c9b600]"
@@ -109,7 +109,7 @@ export default function SubtitlesPanel({
             Canvas Media
           </span>
         </div>
-        <div className="flex flex-col gap-5 p-5">
+        <div className="flex flex-col gap-5 p-4 sm:p-5">
           <div className="grid grid-cols-2 gap-3">
             {(['x', 'y', 'width', 'height'] as const).map((field) => (
               <label key={field} className="flex flex-col gap-1">

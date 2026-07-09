@@ -80,7 +80,7 @@ export default function VideoEditor() {
   }
 
   return (
-    <div className="flex min-h-[100svh] flex-col overflow-x-hidden bg-[#1a0c05] pb-[env(safe-area-inset-bottom)] supports-[min-height:100dvh]:min-h-[100dvh]">
+    <div className="flex min-h-[100svh] flex-col overflow-x-hidden overflow-y-auto bg-[#1a0c05] pb-[env(safe-area-inset-bottom)] supports-[min-height:100dvh]:min-h-[100dvh]">
       <EditorHeader
         title={editor.title}
         format={editor.state.format}
@@ -94,9 +94,9 @@ export default function VideoEditor() {
         onImport={handleImport}
       />
 
-      <div className="flex-1 overflow-visible overscroll-contain md:min-h-[720px]">
-        <div className="flex min-h-full flex-col md:min-h-[720px] md:flex-row">
-          <div className="h-[34svh] min-h-[220px] w-full shrink-0 md:h-auto md:max-h-none md:w-72 lg:w-80 xl:w-96">
+      <div className="flex-1 overflow-visible overscroll-contain xl:min-h-[720px]">
+        <div className="flex min-h-full flex-col xl:min-h-[720px] xl:flex-row">
+          <div className="h-[42svh] min-h-[260px] max-h-[520px] w-full shrink-0 xl:h-auto xl:max-h-none xl:w-72 2xl:w-96">
             <LeftSidebar
               layers={editor.state.layers}
               mediaAssets={editor.state.mediaAssets}
@@ -117,7 +117,7 @@ export default function VideoEditor() {
             />
           </div>
 
-          <div className="flex min-h-[320px] min-w-0 flex-1 sm:min-h-[460px] md:min-h-[720px]">
+          <div className="flex min-h-[360px] min-w-0 flex-1 sm:min-h-[500px] xl:min-h-[720px]">
             <VideoPreview
               videoUrl={editor.state.videoUrl ?? ''}
               isPlaying={editor.state.isPlaying}
@@ -152,7 +152,7 @@ export default function VideoEditor() {
             />
           </div>
 
-          <div className="h-[38svh] min-h-[240px] w-full shrink-0 md:h-auto md:max-h-none md:w-72 lg:w-80 xl:w-96">
+          <div className="h-[44svh] min-h-[280px] max-h-[560px] w-full shrink-0 xl:h-auto xl:max-h-none xl:w-72 2xl:w-96">
             <SubtitlesPanel
               subtitles={editor.state.subtitles}
               currentTime={editor.state.currentTime}

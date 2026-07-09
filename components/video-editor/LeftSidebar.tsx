@@ -257,19 +257,19 @@ export default function LeftSidebar({
   }
 
   return (
-    <aside className="flex h-full w-full flex-col overflow-hidden border-b border-[#3d2510] bg-[#160d05] md:border-b-0 md:border-r">
-        <div className="flex items-center gap-2 border-b border-[#3d2510] p-4">
+    <aside className="flex h-full w-full flex-col overflow-hidden border-b border-[#3d2510] bg-[#160d05] xl:border-b-0 xl:border-r">
+        <div className="flex shrink-0 items-center gap-2 border-b border-[#3d2510] p-3 sm:p-4">
           <Layers size={13} className="text-[#c9b600]" />
           <h2 className="text-[#e8d5a0] text-xs font-bold uppercase tracking-wider">
             Layer Objects
           </h2>
         </div>
 
-        <div className="border-b border-[#3d2510] p-4">
+        <div className="shrink-0 border-b border-[#3d2510] p-3 sm:p-4">
           <LayerTypeMenu activeType={activeType} onChange={setActiveType} />
         </div>
 
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4 scrollbar-thin">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 scrollbar-thin sm:p-4">
           <div className="flex items-center justify-between">
             <h3 className="text-xs text-[#7a6040] font-semibold uppercase tracking-wider">
               {activeMeta?.title}
@@ -377,7 +377,7 @@ export default function LeftSidebar({
                   return (
                     <div
                       key={asset.id}
-                      className="relative flex min-w-0 items-start gap-3 rounded-xl border border-[#3d2510] bg-[#241508] p-3 text-left text-[#c8b88a] hover:border-[#c9b600]"
+                      className="relative flex min-w-0 items-start gap-3 rounded-xl border border-[#3d2510] bg-[#241508] p-2.5 text-left text-[#c8b88a] hover:border-[#c9b600] sm:p-3"
                       title={
                         asset.status === 'deployed'
                           ? asset.type === 'audio'
@@ -390,9 +390,9 @@ export default function LeftSidebar({
                         type="button"
                         disabled={asset.status !== 'deployed'}
                         onClick={() => onPlaceAsset(asset.id)}
-                        className="flex min-w-0 flex-1 items-start gap-3 text-left disabled:opacity-60"
+                        className="flex min-w-0 flex-1 items-start gap-2 text-left disabled:opacity-60 sm:gap-3"
                       >
-                        <span className="relative h-20 w-32 shrink-0 overflow-hidden rounded-lg border border-[#3d2510] bg-[#160d05]">
+                        <span className="relative h-20 w-28 shrink-0 overflow-hidden rounded-lg border border-[#3d2510] bg-[#160d05] sm:w-32">
                           <AssetPreview asset={asset} />
                           <span className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded bg-black/60 text-[#f3dd84]">
                             <AssetIcon size={11} />
@@ -451,15 +451,15 @@ export default function LeftSidebar({
                 return (
                   <div
                     key={asset.id}
-                    className="relative flex min-w-0 items-start gap-3 rounded-xl border border-[#3d2510] bg-[#241508] p-3 text-left text-[#c8b88a] hover:border-[#c9b600]"
+                    className="relative flex min-w-0 items-start gap-3 rounded-xl border border-[#3d2510] bg-[#241508] p-2.5 text-left text-[#c8b88a] hover:border-[#c9b600] sm:p-3"
                     title="Add text to timeline"
                   >
                     <button
                       type="button"
                       onClick={() => onPlaceTextAsset(asset.id)}
-                      className="flex min-w-0 flex-1 items-start gap-3 text-left"
+                      className="flex min-w-0 flex-1 items-start gap-2 text-left sm:gap-3"
                     >
-                      <span className="relative h-20 w-32 shrink-0 overflow-hidden rounded-lg border border-[#3d2510] bg-[#160d05]">
+                      <span className="relative h-20 w-28 shrink-0 overflow-hidden rounded-lg border border-[#3d2510] bg-[#160d05] sm:w-32">
                         <TextAssetPreview asset={asset} />
                         <span className="absolute left-1 top-1 flex h-5 w-5 items-center justify-center rounded bg-black/60 text-[#f3dd84]">
                           <TypeIcon size={11} />
