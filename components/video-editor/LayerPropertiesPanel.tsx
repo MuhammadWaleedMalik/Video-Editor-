@@ -7,7 +7,6 @@ import {
   Image as ImageIcon,
   Music,
   Paintbrush,
-  Sliders,
   Type as TypeIcon,
   Upload,
   Volume2,
@@ -15,7 +14,6 @@ import {
   Trash2,
 } from 'lucide-react';
 import { Layer } from '@/types/editor';
-import LayerCommonFields from './LayerCommonFields';
 import LayerMediaSourceFields from './LayerMediaSourceFields';
 import LayerTextStyleFields from './LayerTextStyleFields';
 import { buildLayerFromFile } from '@/lib/videoAssets';
@@ -62,14 +60,6 @@ export default function LayerPropertiesPanel({
       </div>
 
       <div className="flex flex-1 flex-col gap-4 p-3 sm:p-4">
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center gap-1.5 text-[10px] text-[#7a6040] uppercase font-bold tracking-wider border-b border-[#3d2510]/50 pb-1">
-            <Sliders size={11} />
-            <span>Layer Details</span>
-          </div>
-          <LayerCommonFields layer={layer} onUpdate={onUpdate} />
-        </div>
-
         {layer.type === 'text' ? (
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-1.5 text-[10px] text-[#7a6040] uppercase font-bold tracking-wider border-b border-[#3d2510]/50 pb-1">

@@ -63,8 +63,8 @@ const MAX_TIMELINE_PIXELS_PER_SECOND = 90;
 const MIN_TIMELINE_WIDTH = 1280;
 const FIT_TIMELINE_GUTTER_PX = 116;
 const MIN_FIT_TIMELINE_WIDTH = 240;
-const STACK_ROW_TOP = 54;
-const STACK_ROW_HEIGHT = 156;
+const STACK_ROW_TOP = 44;
+const STACK_ROW_HEIGHT = 96;
 const STACK_AUTO_SCROLL_EDGE_PX = 76;
 const STACK_AUTO_SCROLL_MAX_SPEED = 18;
 const TIMELINE_AUTO_SCROLL_EDGE_PX = 96;
@@ -561,36 +561,34 @@ export default function Timeline({
   return (
     <div className="shrink-0 border-t border-[#3d2510] bg-[#0e0702] px-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-2 sm:px-4 sm:pt-3">
       <div
-        className="relative max-h-[52svh] min-h-[240px] touch-auto select-none overflow-x-auto overflow-y-auto overscroll-contain rounded-2xl bg-[#18120a] p-2 shadow-[inset_0_1px_0_rgba(255,240,166,0.04)] scrollbar-thin sm:max-h-[420px] sm:min-h-[280px] sm:p-3 xl:max-h-[360px]"
+        className="relative max-h-[48svh] min-h-[210px] touch-auto select-none overflow-x-auto overflow-y-auto overscroll-contain rounded-2xl bg-[#18120a] p-2 shadow-[inset_0_1px_0_rgba(255,240,166,0.04)] scrollbar-thin sm:max-h-[360px] sm:min-h-[230px] sm:p-3 xl:max-h-[300px]"
         ref={trackAreaRef}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerUp}
         onWheel={onTimelineWheel}
       >
-        <div className="sticky top-0 z-40 mb-2 flex flex-wrap items-center justify-between gap-2 bg-[#18120a] pb-2">
-          <span className="text-[#5a4530] text-[9px] font-bold uppercase tracking-widest">Timeline</span>
+        <div className="pointer-events-none sticky top-0 z-[100] h-0">
           <div
-            className="flex items-center gap-2 rounded-full border border-[#3d2510] bg-[#120a02]/95 px-2 py-1 text-[10px] text-[#9a8060] shadow-[0_8px_18px_rgba(0,0,0,0.22)]"
+            className="pointer-events-auto absolute right-1 top-1 flex items-center gap-1 rounded-full border border-[#3d2510] bg-[#120a02]/95 px-1.5 py-1 text-[10px] text-[#9a8060] shadow-[0_8px_18px_rgba(0,0,0,0.22)] backdrop-blur"
             title="Use Ctrl/Alt + mouse wheel on the timeline to zoom spacing"
             onPointerDown={(event) => event.stopPropagation()}
           >
-            <span className="hidden font-semibold uppercase tracking-[0.18em] sm:inline">Spacing</span>
             <button
               type="button"
               onClick={() => adjustTimelineZoom(-6)}
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-[#3d2510] bg-[#241508] text-sm font-black leading-none text-[#c8b88a] shadow-[inset_0_1px_0_rgba(255,240,166,0.05)] transition hover:border-[#7d5d1d] hover:bg-[#3d2510] hover:text-[#f2d40b] active:scale-95"
+              className="flex h-6 w-6 items-center justify-center rounded-full border border-[#3d2510] bg-[#241508] text-xs font-black leading-none text-[#c8b88a] shadow-[inset_0_1px_0_rgba(255,240,166,0.05)] transition hover:border-[#7d5d1d] hover:bg-[#3d2510] hover:text-[#f2d40b] active:scale-95"
               aria-label="Decrease timeline spacing"
             >
               -
             </button>
-            <span className="min-w-16 rounded-full border border-[#3d2510] bg-[#1a0c05] px-2 py-1 text-center font-mono font-bold text-[#f2d40b] shadow-inner">
+            <span className="min-w-12 rounded-full border border-[#3d2510] bg-[#1a0c05] px-1.5 py-0.5 text-center font-mono text-[9px] font-bold text-[#f2d40b] shadow-inner">
               {timelineZoomLabel}
             </span>
             <button
               type="button"
               onClick={() => adjustTimelineZoom(6)}
-              className="flex h-7 w-7 items-center justify-center rounded-full border border-[#3d2510] bg-[#241508] text-sm font-black leading-none text-[#c8b88a] shadow-[inset_0_1px_0_rgba(255,240,166,0.05)] transition hover:border-[#7d5d1d] hover:bg-[#3d2510] hover:text-[#f2d40b] active:scale-95"
+              className="flex h-6 w-6 items-center justify-center rounded-full border border-[#3d2510] bg-[#241508] text-xs font-black leading-none text-[#c8b88a] shadow-[inset_0_1px_0_rgba(255,240,166,0.05)] transition hover:border-[#7d5d1d] hover:bg-[#3d2510] hover:text-[#f2d40b] active:scale-95"
               aria-label="Increase timeline spacing"
             >
               +

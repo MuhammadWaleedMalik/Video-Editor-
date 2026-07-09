@@ -374,10 +374,10 @@ export default function TimelineRows({
     });
     return indexMap;
   }, [stackRows]);
-  const rowGap = 156;
-  const rowTopOffset = 54;
+  const rowGap = 96;
+  const rowTopOffset = 44;
   const rowCount = Math.max(stackRows.length, 1);
-  const laneHeight = Math.max(440, rowTopOffset + rowCount * rowGap + 28);
+  const laneHeight = Math.max(220, rowTopOffset + rowCount * rowGap + 16);
   const majorTickStep = useMemo(() => getReadableTimelineTickStep(dur, timelineWidth), [dur, timelineWidth]);
   const minorTickStep = useMemo(() => getTimelineMinorTickStep(dur, majorTickStep), [dur, majorTickStep]);
   const majorTicks = useMemo(() => getTimelineTicks(dur, majorTickStep), [dur, majorTickStep]);
@@ -475,10 +475,10 @@ export default function TimelineRows({
 
   return (
     <>
-      <div className="sticky top-8 z-30 -mx-1 mb-3 rounded-2xl bg-[#18120a]/98 px-1 pb-2 pt-1 shadow-[0_16px_34px_rgba(0,0,0,0.45)] backdrop-blur">
-        <TrackRow label="Time" contentWidth={timelineWidth} heightClassName="h-12">
+      <div className="sticky top-8 z-[90] -mx-1 mb-2 rounded-2xl bg-[#18120a]/98 px-1 pb-1.5 pt-1 shadow-[0_16px_34px_rgba(0,0,0,0.45)] backdrop-blur">
+        <TrackRow label="Time" contentWidth={timelineWidth} heightClassName="h-10">
           <div
-            className="relative z-30 h-12 touch-none cursor-ew-resize rounded-xl bg-[#0d0803] p-1 shadow-[inset_0_-1px_0_rgba(242,212,11,0.22)]"
+            className="relative z-[90] h-10 touch-none cursor-ew-resize rounded-xl bg-[#0d0803] p-1 shadow-[inset_0_-1px_0_rgba(242,212,11,0.22)]"
             style={{ minWidth: `${timelineWidth}px` }}
             onPointerDown={onTimelinePointerDown}
             title="Drag to scrub the timeline"
@@ -490,14 +490,14 @@ export default function TimelineRows({
               timelineWidth={timelineWidth}
             />
             <div
-              className="pointer-events-none absolute bottom-1 top-1 z-40 w-0"
+              className="pointer-events-none absolute bottom-1 top-1 z-[95] w-0"
               style={{ left: playheadPercent }}
             >
               <div className="absolute left-1/2 top-0 h-full w-[3px] -translate-x-1/2 rounded-full bg-[#f2d40b] shadow-[0_0_18px_rgba(242,212,11,0.85)]" />
               <div className="absolute bottom-0 left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 rounded-[3px] bg-[#f2d40b] shadow-[0_0_14px_rgba(242,212,11,0.65)]" />
             </div>
             <span
-              className="pointer-events-none absolute top-0 z-40 whitespace-nowrap rounded-full border border-[#f2d40b] bg-[#1a0c05] px-2 py-1 font-mono text-[10px] font-black leading-none text-[#fff6b0] shadow-[0_8px_18px_rgba(0,0,0,0.45),0_0_14px_rgba(242,212,11,0.32)]"
+              className="pointer-events-none absolute top-0 z-[96] whitespace-nowrap rounded-full border border-[#f2d40b] bg-[#1a0c05] px-2 py-1 font-mono text-[10px] font-black leading-none text-[#fff6b0] shadow-[0_8px_18px_rgba(0,0,0,0.45),0_0_14px_rgba(242,212,11,0.32)]"
               style={{ left: playheadPercent, transform: playheadLabelTransform }}
             >
               {formatTick(playheadTime)}
@@ -547,7 +547,7 @@ export default function TimelineRows({
 
           {stackDragPreview ? (
             <div
-              className="pointer-events-none absolute left-2 right-2 z-[26] flex h-28 items-center justify-center rounded-xl border-2 border-dashed border-[#f2d40b] bg-[#f2d40b]/10 text-[10px] font-bold uppercase tracking-[0.22em] text-[#f2d40b] shadow-[inset_0_0_22px_rgba(242,212,11,0.16),0_0_18px_rgba(242,212,11,0.25)] transition-[top,opacity,transform] duration-150 ease-out"
+              className="pointer-events-none absolute left-2 right-2 z-[26] flex h-20 items-center justify-center rounded-xl border-2 border-dashed border-[#f2d40b] bg-[#f2d40b]/10 text-[10px] font-bold uppercase tracking-[0.22em] text-[#f2d40b] shadow-[inset_0_0_22px_rgba(242,212,11,0.16),0_0_18px_rgba(242,212,11,0.25)] transition-[top,opacity,transform] duration-150 ease-out"
               style={{
                 top: `${
                   rowTopOffset + Math.max(0, Math.min(rowCount - 1, stackDragPreview.targetIndex)) * rowGap
@@ -587,7 +587,7 @@ export default function TimelineRows({
               className="absolute z-[60] flex max-w-[calc(100vw-5.5rem)] items-center gap-1 overflow-hidden rounded-xl border border-[#5a3f11] bg-[#1a0c05]/95 p-1 text-[#fff0a6] shadow-[0_14px_30px_rgba(0,0,0,0.45),0_0_18px_rgba(242,212,11,0.16)] backdrop-blur"
               style={{
                 left: timeToPercent(selectedClipToolbarTime),
-                top: `${Math.max(6, rowTopOffset + selectedClipRowIndex * rowGap - 42)}px`,
+                top: `${rowTopOffset + selectedClipRowIndex * rowGap + 6}px`,
                 transform: selectedClipToolbarTransform,
               }}
               onPointerDown={(e) => {
@@ -606,7 +606,6 @@ export default function TimelineRows({
                 aria-label="Delete clip"
               >
                 <Trash2 size={14} />
-                <span className="hidden text-[10px] font-bold uppercase tracking-[0.12em] sm:inline">Delete</span>
               </button>
               {selectedClip.type === 'video' ? (
                 <button
@@ -625,7 +624,6 @@ export default function TimelineRows({
                   aria-label="Split video clip"
                 >
                   <Scissors size={14} />
-                  <span className="hidden text-[10px] font-bold uppercase tracking-[0.12em] sm:inline">Split</span>
                 </button>
               ) : null}
               {selectedClip.type === 'video' ? (
@@ -640,9 +638,6 @@ export default function TimelineRows({
                   aria-label={selectedClip.muted ? 'Unmute clip' : 'Mute clip'}
                 >
                   {selectedClip.muted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                  <span className="hidden text-[10px] font-bold uppercase tracking-[0.12em] sm:inline">
-                    {selectedClip.muted ? 'Unmute' : 'Mute'}
-                  </span>
                 </button>
               ) : null}
             </div>
@@ -653,7 +648,7 @@ export default function TimelineRows({
               className="absolute z-[60] flex max-w-[calc(100vw-5.5rem)] items-center gap-1 overflow-hidden rounded-xl border border-[#5a3f11] bg-[#1a0c05]/95 p-1 text-[#fff0a6] shadow-[0_14px_30px_rgba(0,0,0,0.45),0_0_18px_rgba(242,212,11,0.16)] backdrop-blur"
               style={{
                 left: timeToPercent(selectedLayerToolbarTime),
-                top: `${Math.max(6, rowTopOffset + selectedLayerRowIndex * rowGap - 42)}px`,
+                top: `${rowTopOffset + selectedLayerRowIndex * rowGap + 6}px`,
                 transform: selectedLayerToolbarTransform,
               }}
               onPointerDown={(e) => {
@@ -672,7 +667,6 @@ export default function TimelineRows({
                 aria-label="Delete item"
               >
                 <Trash2 size={14} />
-                <span className="hidden text-[10px] font-bold uppercase tracking-[0.12em] sm:inline">Delete</span>
               </button>
               {selectedLayer.type === 'audio' ? (
                 <button
@@ -693,7 +687,6 @@ export default function TimelineRows({
                   aria-label="Split audio layer"
                 >
                   <Scissors size={14} />
-                  <span className="hidden text-[10px] font-bold uppercase tracking-[0.12em] sm:inline">Split</span>
                 </button>
               ) : null}
               {selectedLayer.type === 'audio' ? (
@@ -708,9 +701,6 @@ export default function TimelineRows({
                   aria-label={selectedLayer.mediaMuted ? 'Unmute audio' : 'Mute audio'}
                 >
                   {selectedLayer.mediaMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
-                  <span className="hidden text-[10px] font-bold uppercase tracking-[0.12em] sm:inline">
-                    {selectedLayer.mediaMuted ? 'Unmute' : 'Mute'}
-                  </span>
                 </button>
               ) : null}
             </div>
@@ -740,7 +730,7 @@ export default function TimelineRows({
               return (
                 <div
                   key={`clip-${clip.id}`}
-                  className={`group absolute h-28 overflow-hidden ${compactClip ? 'rounded-md' : 'rounded-xl'} border ${
+                  className={`group absolute h-20 overflow-hidden ${compactClip ? 'rounded-md' : 'rounded-xl'} border ${
                     selected
                       ? 'bg-[#c9b600] border-[#f0dd2a] text-[#1a0c05]'
                       : isVideo
@@ -809,7 +799,7 @@ export default function TimelineRows({
                       onClipPointerDown(e, clip, 'z');
                     }}
                     className={`absolute z-20 flex touch-none cursor-grab items-center justify-center border border-[#7b6a2b] bg-black/70 text-[#e7cf7f] transition-transform active:scale-95 active:cursor-grabbing hover:text-[#f2d40b] ${
-                      compactClip ? 'bottom-1 left-1 h-6 w-6 rounded' : 'left-2 top-12 h-8 w-8 rounded-md'
+                      compactClip ? 'bottom-1 left-1 h-6 w-6 rounded' : 'left-2 top-1/2 h-7 w-7 -translate-y-1/2 rounded-md'
                     }`}
                     title="Drag to change stack order"
                   >
@@ -832,7 +822,7 @@ export default function TimelineRows({
             return (
               <div
                 key={`layer-${layer.id}`}
-                className={`absolute h-28 overflow-hidden ${compactLayer ? 'rounded-md' : 'rounded-xl'} border ${
+                className={`absolute h-20 overflow-hidden ${compactLayer ? 'rounded-md' : 'rounded-xl'} border ${
                   selected
                     ? 'bg-[#c9b600] border-[#f0dd2a] text-[#1a0c05]'
                     : 'bg-[#2e2340] border-[#6f5790] text-[#eadfff] hover:border-[#b79bea]'
@@ -871,7 +861,7 @@ export default function TimelineRows({
                     onLayerPointerDown(e, layer, 'z');
                   }}
                   className={`absolute z-20 flex touch-none cursor-grab items-center justify-center border border-[#7b6a2b] bg-black/70 text-[#e7cf7f] transition-transform active:scale-95 active:cursor-grabbing hover:text-[#f2d40b] ${
-                    compactLayer ? 'bottom-1 left-1 h-6 w-6 rounded' : 'left-2 top-12 h-8 w-8 rounded-md'
+                    compactLayer ? 'bottom-1 left-1 h-6 w-6 rounded' : 'left-2 top-1/2 h-7 w-7 -translate-y-1/2 rounded-md'
                   }`}
                   title="Drag to change stack order"
                 >

@@ -25,14 +25,14 @@ const TimelineTickStrip = memo(function TimelineTickStrip({
 
   return (
     <div
-      className="relative h-9 overflow-hidden rounded-lg bg-[#0f0904] shadow-[inset_0_-1px_0_rgba(242,212,11,0.16)]"
+      className="relative h-8 overflow-hidden rounded-lg bg-[#0f0904] shadow-[inset_0_-1px_0_rgba(242,212,11,0.16)]"
       style={{ minWidth: `${timelineWidth}px` }}
     >
-      <div className="absolute left-0 right-0 top-[18px] h-px bg-[#c9b600]/45" />
+      <div className="absolute left-0 right-0 top-[16px] h-px bg-[#c9b600]/45" />
       {minorTicks.map((tick) => (
         <div
           key={`minor-${tick}`}
-          className="absolute top-[18px] h-2 border-l border-[#c9b600]/18"
+          className="absolute top-[16px] h-2 border-l border-[#c9b600]/18"
           style={{ left: timeToPercent(tick) }}
         />
       ))}
@@ -47,7 +47,7 @@ const TimelineTickStrip = memo(function TimelineTickStrip({
         return (
           <div
             key={`major-${tick}`}
-            className="absolute top-0 h-8 border-l border-[#f2d40b]/70"
+            className="absolute top-0 h-7 border-l border-[#f2d40b]/70"
             style={{ left: timeToPercent(tick) }}
           >
             <span

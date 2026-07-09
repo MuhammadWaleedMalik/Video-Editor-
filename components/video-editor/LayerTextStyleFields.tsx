@@ -260,21 +260,20 @@ function ColorPopupField({ label, value, displayValue, onChange }: ColorPopupFie
 }
 
 export default function LayerTextStyleFields({ layer, onUpdate }: LayerTextStyleFieldsProps) {
-  const currentTheme = useMemo(
-    () => TEXT_THEMES.find((theme) => theme.id === layer.themeId) ?? TEXT_THEMES[0],
-    [layer.themeId]
+  const activeFont = useMemo(
+    () =>
+      TEXT_THEMES.find((font) => font.id === layer.themeId || font.fontFamily === layer.fontFamily) ??
+      TEXT_THEMES[0],
+    [layer.fontFamily, layer.themeId]
   );
 
-  function applyTheme(themeId: string) {
-    const theme = TEXT_THEMES.find((item) => item.id === themeId);
-    if (!theme) return;
+  function applyFont(fontId: string) {
+    const font = TEXT_THEMES.find((item) => item.id === fontId);
+    if (!font) return;
     onUpdate({
       ...layer,
-      themeId: theme.id,
-      fontFamily: theme.fontFamily,
-      fontSize: theme.fontSize ?? layer.fontSize ?? 20,
-      color: theme.color ?? layer.color ?? '#ffffff',
-      bgColor: theme.bgColor ?? layer.bgColor ?? '#00000000',
+      themeId: font.id,
+      fontFamily: font.fontFamily,
     });
   }
 
@@ -292,20 +291,21 @@ export default function LayerTextStyleFields({ layer, onUpdate }: LayerTextStyle
       </div>
 
       <div className="flex flex-col gap-1">
-        <label className="text-[9px] text-[#5a4530]">Theme</label>
+        <label className="text-[9px] text-[#5a4530]">Font</label>
         <select
-          value={currentTheme?.id ?? layer.themeId ?? 'inter-clean'}
-          onChange={(event) => applyTheme(event.target.value)}
+          value={activeFont?.id ?? layer.themeId ?? 'inter-clean'}
+          onChange={(event) => applyFont(event.target.value)}
           className="min-h-10 w-full rounded-lg border border-[#3d2510] bg-[#1f1005] px-3 py-2 text-xs text-[#e8d5a0] outline-none focus:border-[#c9b600]"
+          style={{ fontFamily: activeFont?.fontFamily ?? layer.fontFamily ?? 'Inter, Arial, sans-serif' }}
         >
-          {TEXT_THEMES.map((theme) => (
-            <option key={theme.id} value={theme.id}>
-              {theme.name}
+          {TEXT_THEMES.map((font) => (
+            <option key={font.id} value={font.id} style={{ fontFamily: font.fontFamily }}>
+              {font.name}
             </option>
           ))}
         </select>
         <p className="text-[8px] text-[#6a5036]">
-          Active: <span style={{ fontFamily: currentTheme?.fontFamily || layer.fontFamily || 'Inter' }}>AaBbCc123</span>
+          Active: <span style={{ fontFamily: activeFont?.fontFamily || layer.fontFamily || 'Inter' }}>AaBbCc123</span>
         </p>
       </div>
 
