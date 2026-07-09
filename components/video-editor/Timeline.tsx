@@ -559,9 +559,9 @@ export default function Timeline({
   }, []);
 
   return (
-    <div className="shrink-0 border-t border-[#3d2510] bg-[#0e0702] px-3 pb-3 pt-2 sm:px-4 sm:pt-3">
+    <div className="shrink-0 border-t border-[#3d2510] bg-[#0e0702] px-2 pb-[calc(0.75rem+env(safe-area-inset-bottom))] pt-2 sm:px-4 sm:pt-3">
       <div
-        className="relative max-h-[360px] min-h-[240px] touch-auto select-none overflow-x-auto overflow-y-auto overscroll-contain rounded-2xl bg-[#18120a] p-3 shadow-[inset_0_1px_0_rgba(255,240,166,0.04)] scrollbar-thin sm:max-h-[420px] sm:min-h-[280px]"
+        className="relative max-h-[52svh] min-h-[240px] touch-auto select-none overflow-x-auto overflow-y-auto overscroll-contain rounded-2xl bg-[#18120a] p-2 shadow-[inset_0_1px_0_rgba(255,240,166,0.04)] scrollbar-thin sm:max-h-[420px] sm:min-h-[280px] sm:p-3 xl:max-h-[360px]"
         ref={trackAreaRef}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}

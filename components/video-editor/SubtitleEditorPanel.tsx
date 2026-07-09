@@ -98,15 +98,15 @@ export default function SubtitleEditorPanel({
   }
 
   return (
-    <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden border-t border-[#3d2510] bg-[#120a02] md:border-l md:border-t-0">
-      <div className="flex items-center justify-between border-b border-[#3d2510] px-5 py-4">
+    <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-hidden border-t border-[#3d2510] bg-[#120a02] xl:border-l xl:border-t-0">
+      <div className="flex items-center justify-between border-b border-[#3d2510] px-4 py-3 sm:px-5 sm:py-4">
         <h2 className="text-base font-bold text-[#e8d5a0]">Subtitles</h2>
         <button className="rounded border border-[#3d2510] bg-[#2d1a08] px-3 py-1 text-[11px] font-bold text-[#c8b88a]">
           <Edit3 size={12} />
         </button>
       </div>
 
-      <div className="flex flex-col gap-3 border-b border-[#3d2510] px-5 py-4">
+      <div className="flex flex-col gap-3 border-b border-[#3d2510] px-4 py-3 sm:px-5 sm:py-4">
         <label className="text-[9px] text-[#7a6040] uppercase font-bold tracking-wider">Subtitle Font</label>
         <select
           value={subtitleFontFamily}
@@ -180,7 +180,7 @@ export default function SubtitleEditorPanel({
         onChunkTextChange={handleChunkTextChange}
       />
 
-      <div className="border-t border-[#3d2510] px-5 py-4">
+      <div className="border-t border-[#3d2510] px-4 py-3 sm:px-5 sm:py-4">
         <div className="flex items-center gap-1 text-[#5a4530] text-[10px] flex-wrap">
           <span>Export as</span>
           <button onClick={exportSRT} className="text-[#9a8060] hover:text-[#c9b600] underline transition-colors">

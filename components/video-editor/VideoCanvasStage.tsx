@@ -53,7 +53,7 @@ export default function VideoCanvasStage({
   containerStyle,
 }: VideoCanvasStageProps) {
   return (
-    <div ref={viewportRef} className="flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+    <div ref={viewportRef} className="flex min-h-[260px] flex-1 items-center justify-center overflow-hidden sm:min-h-[340px]">
       <div
         ref={containerRef}
         onDragOver={onDragOver}

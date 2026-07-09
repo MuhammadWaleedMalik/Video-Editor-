@@ -98,7 +98,7 @@ export default function VideoPreview({
   });
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col gap-3 overflow-hidden p-3 sm:p-4">
+    <div className="flex h-full min-h-0 w-full flex-col gap-2 overflow-hidden p-2 sm:gap-3 sm:p-4">
       <VideoCanvasStage
         videoRef={videoRef}
         canvasRef={refs.canvasRef}

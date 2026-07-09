@@ -43,7 +43,7 @@ export default function LayerPropertiesPanel({
   }
 
   return (
-    <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-y-auto border-t border-[#3d2510] bg-[#120a02] scrollbar-thin md:border-l md:border-t-0">
+    <aside className="flex h-full min-h-0 w-full shrink-0 flex-col overflow-y-auto overscroll-contain border-t border-[#3d2510] bg-[#120a02] scrollbar-thin xl:border-l xl:border-t-0">
       <div className="flex items-center gap-2 px-4 py-3 border-b border-[#3d2510] shrink-0">
         <button
           onClick={onBack}
@@ -61,7 +61,7 @@ export default function LayerPropertiesPanel({
         </span>
       </div>
 
-      <div className="flex flex-1 flex-col gap-4 p-4">
+      <div className="flex flex-1 flex-col gap-4 p-3 sm:p-4">
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-1.5 text-[10px] text-[#7a6040] uppercase font-bold tracking-wider border-b border-[#3d2510]/50 pb-1">
             <Sliders size={11} />

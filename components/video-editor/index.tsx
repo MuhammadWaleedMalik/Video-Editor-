@@ -1,7 +1,8 @@
 'use client';
 
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { X } from 'lucide-react';
 import EditorHeader from './EditorHeader';
 import LeftSidebar from './LeftSidebar';
 import VideoPreview from './VideoPreview';
@@ -10,6 +11,8 @@ import Timeline from './Timeline';
 import useVideoEditorController from './editorController';
 import { buildEditorDraft, saveEditorDraft } from '@/lib/editorDraft';
 import { renderEditedProjectForTranscription } from './renderEditedProject';
+
+type MobilePanel = 'media' | 'settings' | null;
 
 export default function VideoEditor() {
   const router = useRouter();
@@ -20,6 +23,32 @@ export default function VideoEditor() {
   const [isRenderingPreview, setIsRenderingPreview] = useState(false);
   const [previewStatus, setPreviewStatus] = useState('');
   const [previewError, setPreviewError] = useState('');
+  const [mobilePanel, setMobilePanel] = useState<MobilePanel>(null);
+
+  useEffect(() => {
+    if (!mobilePanel) return undefined;
+    const scrollY = window.scrollY;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyPosition = document.body.style.position;
+    const previousBodyTop = document.body.style.top;
+    const previousBodyWidth = document.body.style.width;
+
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
+    return () => {
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.position = previousBodyPosition;
+      document.body.style.top = previousBodyTop;
+      document.body.style.width = previousBodyWidth;
+      window.scrollTo(0, scrollY);
+    };
+  }, [mobilePanel]);
 
   function handleImport() {
     if (!hasTimeline) return;
@@ -79,6 +108,62 @@ export default function VideoEditor() {
     setPreviewError('');
   }
 
+  function renderMediaPanel() {
+    return (
+      <LeftSidebar
+        layers={editor.state.layers}
+        mediaAssets={editor.state.mediaAssets}
+        textAssets={editor.state.textAssets}
+        selectedLayerId={editor.state.selectedLayerId}
+        onSelectLayer={editor.handleSelectLayer}
+        onAddLayer={editor.handleAddLayer}
+        onDeleteLayer={editor.handleDeleteLayer}
+        onVideoUpload={editor.handleVideoUpload}
+        onImageUpload={editor.handleImageUpload}
+        onAudioUpload={editor.handleAudioUpload}
+        onPlaceAsset={editor.handlePlaceAsset}
+        onDeleteAsset={editor.handleDeleteAsset}
+        onPlaceTextAsset={editor.handlePlaceTextAsset}
+        onDeleteTextAsset={editor.handleDeleteTextAsset}
+        isUploadingMedia={editor.state.isUploadingMedia}
+        uploadError={editor.state.uploadError}
+      />
+    );
+  }
+
+  function renderSettingsPanel() {
+    return (
+      <SubtitlesPanel
+        subtitles={editor.state.subtitles}
+        currentTime={editor.state.currentTime}
+        duration={editor.state.duration}
+        onSubtitlesChange={editor.handleSubtitlesChange}
+        onSeek={editor.handleSeek}
+        isTranscribing={editor.isTranscribing}
+        transcribeStatus={editor.transcribeStatus}
+        onAutoTranscribe={editor.handleAutoTranscribe}
+        onTranscribePause={editor.handleTranscribePause}
+        onTranscribeResume={editor.handleTranscribeResume}
+        onTranscribeCancel={editor.handleTranscribeCancel}
+        transcribeLanguage={editor.transcribeLanguage}
+        onTranscribeLanguageChange={editor.handleTranscribeLanguageChange}
+        subtitleFontScale={editor.state.subtitleFontScale}
+        subtitleFontFamily={editor.state.subtitleFontFamily}
+        onSubtitleFontScaleChange={editor.handleSubtitleFontScaleChange}
+        onSubtitleFontFamilyChange={editor.handleSubtitleFontFamilyChange}
+        layers={editor.state.layers}
+        selectedLayerId={editor.state.selectedLayerId}
+        canvasObjects={editor.state.canvasObjects}
+        selectedCanvasObjectId={editor.state.selectedCanvasObjectId}
+        onUpdateLayer={editor.handleUpdateLayer}
+        onUpdateCanvasObject={editor.handleUpdateCanvasObject}
+        onSelectClip={editor.handleSelectClip}
+        onDeleteLayer={editor.handleDeleteLayer}
+        onSelectLayer={editor.handleSelectLayer}
+      />
+    );
+  }
+
   return (
     <div className="flex min-h-[100svh] flex-col overflow-x-hidden overflow-y-auto bg-[#1a0c05] pb-[env(safe-area-inset-bottom)] supports-[min-height:100dvh]:min-h-[100dvh]">
       <EditorHeader
@@ -92,32 +177,17 @@ export default function VideoEditor() {
           setShowPreviewConfirm(true);
         }}
         onImport={handleImport}
+        onMediaOpen={() => setMobilePanel('media')}
+        onEditOpen={() => setMobilePanel('settings')}
       />
 
       <div className="flex-1 overflow-visible overscroll-contain xl:min-h-[720px]">
-        <div className="flex min-h-full flex-col xl:min-h-[720px] xl:flex-row">
-          <div className="h-[42svh] min-h-[260px] max-h-[520px] w-full shrink-0 xl:h-auto xl:max-h-none xl:w-72 2xl:w-96">
-            <LeftSidebar
-              layers={editor.state.layers}
-              mediaAssets={editor.state.mediaAssets}
-              textAssets={editor.state.textAssets}
-              selectedLayerId={editor.state.selectedLayerId}
-              onSelectLayer={editor.handleSelectLayer}
-              onAddLayer={editor.handleAddLayer}
-              onDeleteLayer={editor.handleDeleteLayer}
-              onVideoUpload={editor.handleVideoUpload}
-              onImageUpload={editor.handleImageUpload}
-              onAudioUpload={editor.handleAudioUpload}
-              onPlaceAsset={editor.handlePlaceAsset}
-              onDeleteAsset={editor.handleDeleteAsset}
-              onPlaceTextAsset={editor.handlePlaceTextAsset}
-              onDeleteTextAsset={editor.handleDeleteTextAsset}
-              isUploadingMedia={editor.state.isUploadingMedia}
-              uploadError={editor.state.uploadError}
-            />
+        <div className="flex min-h-full flex-col gap-4 p-3 sm:p-4 xl:min-h-[720px] xl:flex-row xl:gap-0 xl:p-0">
+          <div className="hidden h-[42svh] min-h-[260px] max-h-[520px] w-full shrink-0 xl:block xl:h-auto xl:max-h-none xl:w-72 2xl:w-96">
+            {renderMediaPanel()}
           </div>
 
-          <div className="flex min-h-[360px] min-w-0 flex-1 sm:min-h-[500px] xl:min-h-[720px]">
+          <div className="flex min-h-[420px] min-w-0 flex-1 overflow-hidden rounded-3xl border border-[#3d2510]/70 bg-[#120a02]/40 shadow-[0_18px_55px_rgba(0,0,0,0.22)] sm:min-h-[560px] xl:min-h-[720px] xl:rounded-none xl:border-0 xl:bg-transparent xl:shadow-none">
             <VideoPreview
               videoUrl={editor.state.videoUrl ?? ''}
               isPlaying={editor.state.isPlaying}
@@ -152,38 +222,44 @@ export default function VideoEditor() {
             />
           </div>
 
-          <div className="h-[44svh] min-h-[280px] max-h-[560px] w-full shrink-0 xl:h-auto xl:max-h-none xl:w-72 2xl:w-96">
-            <SubtitlesPanel
-              subtitles={editor.state.subtitles}
-              currentTime={editor.state.currentTime}
-              duration={editor.state.duration}
-              onSubtitlesChange={editor.handleSubtitlesChange}
-              onSeek={editor.handleSeek}
-              isTranscribing={editor.isTranscribing}
-              transcribeStatus={editor.transcribeStatus}
-              onAutoTranscribe={editor.handleAutoTranscribe}
-              onTranscribePause={editor.handleTranscribePause}
-              onTranscribeResume={editor.handleTranscribeResume}
-              onTranscribeCancel={editor.handleTranscribeCancel}
-              transcribeLanguage={editor.transcribeLanguage}
-              onTranscribeLanguageChange={editor.handleTranscribeLanguageChange}
-              subtitleFontScale={editor.state.subtitleFontScale}
-              subtitleFontFamily={editor.state.subtitleFontFamily}
-              onSubtitleFontScaleChange={editor.handleSubtitleFontScaleChange}
-              onSubtitleFontFamilyChange={editor.handleSubtitleFontFamilyChange}
-              layers={editor.state.layers}
-              selectedLayerId={editor.state.selectedLayerId}
-              canvasObjects={editor.state.canvasObjects}
-              selectedCanvasObjectId={editor.state.selectedCanvasObjectId}
-              onUpdateLayer={editor.handleUpdateLayer}
-              onUpdateCanvasObject={editor.handleUpdateCanvasObject}
-              onSelectClip={editor.handleSelectClip}
-              onDeleteLayer={editor.handleDeleteLayer}
-              onSelectLayer={editor.handleSelectLayer}
-            />
+          <div className="hidden h-[44svh] min-h-[280px] max-h-[560px] w-full shrink-0 xl:block xl:h-auto xl:max-h-none xl:w-72 2xl:w-96">
+            {renderSettingsPanel()}
           </div>
         </div>
       </div>
+
+      {mobilePanel ? (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm xl:hidden" onClick={() => setMobilePanel(null)}>
+          <div
+            className={`absolute top-0 flex h-full w-[min(92vw,430px)] flex-col overflow-hidden border-[#4a3010] bg-[#120a02] shadow-[0_24px_80px_rgba(0,0,0,0.72)] ${
+              mobilePanel === 'media' ? 'left-0 border-r rounded-r-3xl' : 'right-0 border-l rounded-l-3xl'
+            }`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#3d2510] px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top))]">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#7a6040]">
+                  {mobilePanel === 'media' ? 'Assets' : 'Edit'}
+                </p>
+                <h3 className="text-sm font-bold text-[#f2d40b]">
+                  {mobilePanel === 'media' ? 'Media Library' : 'Settings & Subtitles'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobilePanel(null)}
+                className="flex h-11 w-11 touch-manipulation items-center justify-center rounded-xl border border-[#3d2510] text-[#c8b88a] hover:border-[#c9b600] hover:text-[#f2d40b]"
+                aria-label="Close panel"
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {mobilePanel === 'media' ? renderMediaPanel() : renderSettingsPanel()}
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       <Timeline
         duration={editor.state.duration}

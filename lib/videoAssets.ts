@@ -12,6 +12,8 @@ export type UploadedMediaResponse = {
   status: 'deployed';
 };
 
+const MEDIA_METADATA_TIMEOUT_MS = 12000;
+
 export function createBlobUrl(file: File): string {
   return URL.createObjectURL(file);
 }
@@ -33,15 +35,26 @@ export function getMediaDuration(url: string, kind: MediaKind): Promise<number |
     media.preload = 'metadata';
     media.src = url;
 
+    let settled = false;
+    const finish = (duration: number | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      media.removeAttribute('src');
+      media.load();
+      resolve(duration);
+    };
+    const timeout = window.setTimeout(() => finish(null), MEDIA_METADATA_TIMEOUT_MS);
+
     media.onloadedmetadata = () => {
       const length = media.duration;
-      resolve(Number.isFinite(length) && length > 0 ? length : null);
+      finish(Number.isFinite(length) && length > 0 ? length : null);
     };
     media.onerror = () => {
-      resolve(null);
+      finish(null);
     };
     media.onabort = () => {
-      resolve(null);
+      finish(null);
     };
   });
 }
@@ -56,29 +69,35 @@ export function loadVideoMetadata(url: string): Promise<{ width: number; height:
     media.setAttribute('webkit-playsinline', 'true');
     media.src = url;
 
+    let settled = false;
     const cleanup = () => {
       media.removeAttribute('src');
       media.load();
     };
+    const finish = (metadata: { width: number; height: number; duration: number } | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      cleanup();
+      resolve(metadata);
+    };
+    const timeout = window.setTimeout(() => finish(null), MEDIA_METADATA_TIMEOUT_MS);
 
     media.onloadedmetadata = () => {
       const duration = media.duration;
       const width = media.videoWidth;
       const height = media.videoHeight;
-      cleanup();
       if (!Number.isFinite(duration) || duration <= 0 || width <= 0 || height <= 0) {
-        resolve(null);
+        finish(null);
         return;
       }
-      resolve({ width, height, duration });
+      finish({ width, height, duration });
     };
     media.onerror = () => {
-      cleanup();
-      resolve(null);
+      finish(null);
     };
     media.onabort = () => {
-      cleanup();
-      resolve(null);
+      finish(null);
     };
   });
 }
@@ -87,14 +106,22 @@ export function loadImageMetadata(url: string): Promise<{ width: number; height:
   return new Promise((resolve) => {
     const img = new Image();
     img.crossOrigin = 'anonymous';
+    let settled = false;
+    const finish = (metadata: { width: number; height: number } | null) => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timeout);
+      resolve(metadata);
+    };
+    const timeout = window.setTimeout(() => finish(null), MEDIA_METADATA_TIMEOUT_MS);
     img.onload = () => {
       if (img.naturalWidth <= 0 || img.naturalHeight <= 0) {
-        resolve(null);
+        finish(null);
         return;
       }
-      resolve({ width: img.naturalWidth, height: img.naturalHeight });
+      finish({ width: img.naturalWidth, height: img.naturalHeight });
     };
-    img.onerror = () => resolve(null);
+    img.onerror = () => finish(null);
     img.src = url;
   });
 }

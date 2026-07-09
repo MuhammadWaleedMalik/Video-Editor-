@@ -115,6 +115,31 @@ export default function BrowserVideoRecorder({
   }, [cleanup, isOpen]);
 
   useEffect(() => {
+    if (!isOpen) return undefined;
+    const scrollY = window.scrollY;
+    const previousHtmlOverflow = document.documentElement.style.overflow;
+    const previousBodyOverflow = document.body.style.overflow;
+    const previousBodyPosition = document.body.style.position;
+    const previousBodyTop = document.body.style.top;
+    const previousBodyWidth = document.body.style.width;
+
+    document.documentElement.style.overflow = 'hidden';
+    document.body.style.overflow = 'hidden';
+    document.body.style.position = 'fixed';
+    document.body.style.top = `-${scrollY}px`;
+    document.body.style.width = '100%';
+
+    return () => {
+      document.documentElement.style.overflow = previousHtmlOverflow;
+      document.body.style.overflow = previousBodyOverflow;
+      document.body.style.position = previousBodyPosition;
+      document.body.style.top = previousBodyTop;
+      document.body.style.width = previousBodyWidth;
+      window.scrollTo(0, scrollY);
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
     return () => {
       cleanup();
     };
@@ -213,8 +238,8 @@ export default function BrowserVideoRecorder({
   ));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-2 backdrop-blur-sm sm:p-4">
-      <div className="flex max-h-[94svh] w-full max-w-5xl flex-col overflow-hidden rounded-3xl border border-[#3d2510] bg-[#120a02] shadow-2xl supports-[height:100dvh]:max-h-[94dvh]">
+    <div className="fixed inset-0 z-50 flex items-end justify-center overflow-hidden bg-black/80 p-2 backdrop-blur-sm sm:items-center sm:p-4">
+      <div className="flex max-h-[96svh] w-full max-w-5xl flex-col overflow-hidden rounded-t-3xl border border-[#3d2510] bg-[#120a02] shadow-2xl supports-[height:100dvh]:max-h-[96dvh] sm:rounded-3xl">
         <div className="flex shrink-0 items-center justify-between border-b border-[#3d2510] px-4 py-3 sm:px-5">
           <div>
             <h2 className="text-sm font-semibold text-[#e8d5a0]">{title}</h2>
@@ -222,14 +247,14 @@ export default function BrowserVideoRecorder({
               Browse or record, max {maxDurationSeconds}s
             </p>
           </div>
-          <button onClick={handleClose} className="flex h-9 w-9 items-center justify-center rounded-xl text-[#7a6040] hover:bg-[#2d1a08] hover:text-[#e8d5a0]">
+          <button onClick={handleClose} className="flex h-11 w-11 items-center justify-center rounded-xl text-[#7a6040] hover:bg-[#2d1a08] hover:text-[#e8d5a0] sm:h-9 sm:w-9">
             <X size={15} />
           </button>
         </div>
 
-        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto p-4 md:grid-cols-[1fr_320px] md:p-5">
+        <div className="grid min-h-0 flex-1 gap-4 overflow-y-auto overscroll-contain p-3 sm:p-4 lg:grid-cols-[minmax(0,1fr)_320px] lg:p-5">
           <div className="min-w-0">
-            <div className="relative aspect-video overflow-hidden rounded-2xl border border-[#3d2510] bg-black shadow-inner">
+              <div className="relative aspect-video max-h-[46svh] overflow-hidden rounded-2xl border border-[#3d2510] bg-black shadow-inner sm:max-h-none">
               <video ref={videoRef} className="h-full w-full object-contain" muted playsInline autoPlay={false} />
               {!isReady ? (
                 <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-[#050301] p-5 text-center">
@@ -251,7 +276,7 @@ export default function BrowserVideoRecorder({
               ) : null}
             </div>
 
-            <div className="mt-4 rounded-2xl border border-[#3d2510] bg-[#1a0c05] p-4">
+            <div className="mt-4 rounded-2xl border border-[#3d2510] bg-[#1a0c05] p-3 sm:p-4">
               <div className="mb-2 flex items-center justify-between text-xs">
                 <span className="font-semibold text-[#e8d5a0]">Recording timeline</span>
                 <span className="font-mono text-[#c9b600]">
@@ -292,7 +317,7 @@ export default function BrowserVideoRecorder({
               <button
                 type="button"
                 onClick={() => browseInputRef.current?.click()}
-                className="flex min-h-24 items-center gap-3 rounded-2xl border border-[#5a3b14] bg-[#241508] p-4 text-left transition hover:border-[#c9b600] hover:bg-[#2d1a08]"
+                className="flex min-h-24 touch-manipulation items-center gap-3 rounded-2xl border border-[#5a3b14] bg-[#241508] p-3 text-left transition hover:border-[#c9b600] hover:bg-[#2d1a08] sm:p-4"
               >
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#160d05] text-[#c9b600]">
                   <Upload size={20} />
@@ -317,7 +342,7 @@ export default function BrowserVideoRecorder({
               }}
             />
 
-            <div className="rounded-2xl border border-[#3d2510] bg-[#1b1006] p-4">
+            <div className="rounded-2xl border border-[#3d2510] bg-[#1b1006] p-3 sm:p-4">
               <div className="mb-3 flex items-center gap-2">
                 <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#120a02] text-[#c9b600]">
                   <Camera size={18} />

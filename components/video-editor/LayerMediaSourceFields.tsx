@@ -33,21 +33,21 @@ export default function LayerMediaSourceFields({
 
   return (
     <div className="flex flex-col gap-2">
-      <button
-        onClick={onBrowse}
-        className="w-full flex items-center justify-center gap-2 bg-[#2d1a08] border border-[#4a3010] hover:border-[#c9b600] text-[#c8b88a] text-xs font-semibold py-2.5 rounded-lg transition-colors"
-      >
-        <Upload size={12} className="text-[#c9b600]" />
-        <span>Browse {isVideo ? 'Video' : layer.type === 'audio' ? 'Audio' : 'Image'} File</span>
-      </button>
-
-      {!isUploadOnly && isVideo && (
+      {isVideo && !isUploadOnly ? (
         <button
           onClick={onRecorderOpen}
-          className="w-full flex items-center justify-center gap-2 bg-[#2d1a08] border border-[#4a3010] hover:border-[#c9b600] text-[#c8b88a] text-xs font-semibold py-2.5 rounded-lg transition-colors"
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#4a3010] bg-[#2d1a08] py-2.5 text-xs font-semibold text-[#c8b88a] transition-colors hover:border-[#c9b600]"
         >
           <Camera size={12} className="text-[#c9b600]" />
-          <span>Record Video</span>
+          <span>Choose Video Source</span>
+        </button>
+      ) : (
+        <button
+          onClick={onBrowse}
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border border-[#4a3010] bg-[#2d1a08] py-2.5 text-xs font-semibold text-[#c8b88a] transition-colors hover:border-[#c9b600]"
+        >
+          <Upload size={12} className="text-[#c9b600]" />
+          <span>Browse {layer.type === 'audio' ? 'Audio' : 'Image'} File</span>
         </button>
       )}
 
@@ -78,8 +78,9 @@ export default function LayerMediaSourceFields({
       {isVideo && !isUploadOnly && (
         <BrowserVideoRecorder
           isOpen={isRecorderOpen}
-          title="Record Layer Video"
+          title="Choose Layer Video"
           onClose={onRecorderClose}
+          onBrowse={onSourceFile}
           onCapture={onCapture}
         />
       )}

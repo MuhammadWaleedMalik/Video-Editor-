@@ -204,25 +204,46 @@ export default function useVideoEditorController(): VideoEditorController {
       set({ uploadError: `Choose a valid ${expectedType} file.` });
       return;
     }
-    if (expectedType === 'video' || expectedType === 'audio') {
-      const localUrl = createBlobUrl(file);
-      try {
-        const duration = expectedType === 'video'
-          ? (await loadVideoMetadata(localUrl))?.duration
-          : await getMediaDuration(localUrl, 'audio');
+    let selectedVideoMetadata: { width: number; height: number; duration: number } | null = null;
+    let selectedImageMetadata: { width: number; height: number } | null = null;
+    let selectedAudioDuration: number | null = null;
+
+    const localUrl = createBlobUrl(file);
+    try {
+      if (expectedType === 'video') {
+        selectedVideoMetadata = await loadVideoMetadata(localUrl);
+        const duration = selectedVideoMetadata?.duration;
         if (!Number.isFinite(duration) || !duration || duration <= 0) {
-          set({ uploadError: `Could not read the selected ${expectedType} metadata.` });
+          set({ uploadError: 'Could not read the selected video metadata.' });
           return;
         }
         if (duration > MAX_TIMELINE_DURATION_SECONDS) {
           set({
-            uploadError: `${expectedType === 'video' ? 'Video' : 'Audio'} is ${Math.ceil(duration)}s long. Maximum ${expectedType} length is ${formatDurationLimit()}.`,
+            uploadError: `Video is ${Math.ceil(duration)}s long. Maximum video length is ${formatDurationLimit()}.`,
           });
           return;
         }
-      } finally {
-        revokeBlobUrl(localUrl);
+      } else if (expectedType === 'audio') {
+        selectedAudioDuration = await getMediaDuration(localUrl, 'audio');
+        if (!Number.isFinite(selectedAudioDuration) || !selectedAudioDuration || selectedAudioDuration <= 0) {
+          set({ uploadError: 'Could not read the selected audio metadata.' });
+          return;
+        }
+        if (selectedAudioDuration > MAX_TIMELINE_DURATION_SECONDS) {
+          set({
+            uploadError: `Audio is ${Math.ceil(selectedAudioDuration)}s long. Maximum audio length is ${formatDurationLimit()}.`,
+          });
+          return;
+        }
+      } else {
+        selectedImageMetadata = await loadImageMetadata(localUrl);
+        if (!selectedImageMetadata) {
+          set({ uploadError: 'Could not read the selected image dimensions.' });
+          return;
+        }
       }
+    } finally {
+      revokeBlobUrl(localUrl);
     }
 
     const temporaryId = crypto.randomUUID();
@@ -256,18 +277,24 @@ export default function useVideoEditorController(): VideoEditorController {
       let duration: number | undefined = uploaded.type === 'image' ? 5 : 0;
 
       if (uploaded.type === 'video') {
-        const metadata = await loadVideoMetadata(uploaded.url);
-        if (!metadata) throw new Error('Could not read the deployed video metadata.');
+        const responseMetadata = Number.isFinite(uploaded.width) && Number.isFinite(uploaded.height) && Number.isFinite(uploaded.duration)
+          ? { width: uploaded.width as number, height: uploaded.height as number, duration: uploaded.duration as number }
+          : null;
+        const metadata = selectedVideoMetadata ?? responseMetadata ?? await loadVideoMetadata(uploaded.url);
+        if (!metadata) throw new Error('Could not read the selected video metadata.');
         width = metadata.width;
         height = metadata.height;
         duration = metadata.duration;
       } else if (uploaded.type === 'image') {
-        const metadata = await loadImageMetadata(uploaded.url);
-        if (!metadata) throw new Error('Could not read the deployed image dimensions.');
+        const responseMetadata = Number.isFinite(uploaded.width) && Number.isFinite(uploaded.height)
+          ? { width: uploaded.width as number, height: uploaded.height as number }
+          : null;
+        const metadata = selectedImageMetadata ?? responseMetadata ?? await loadImageMetadata(uploaded.url);
+        if (!metadata) throw new Error('Could not read the selected image dimensions.');
         width = metadata.width;
         height = metadata.height;
       } else {
-        duration = await getMediaDuration(uploaded.url, 'audio') ?? 0;
+        duration = selectedAudioDuration ?? uploaded.duration ?? await getMediaDuration(uploaded.url, 'audio') ?? 0;
       }
 
       if ((uploaded.type === 'video' || uploaded.type === 'audio') && (!Number.isFinite(duration) || duration <= 0)) {

@@ -62,7 +62,7 @@ export default function VideoPlaybackControls({
   }
 
   return (
-    <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-t border-[#3d2510]/60 px-1 pt-2 pb-[env(safe-area-inset-bottom)] sm:gap-3">
+    <div className="flex min-h-12 shrink-0 flex-wrap items-center gap-2 border-t border-[#3d2510]/60 px-1 pb-[env(safe-area-inset-bottom)] pt-2 sm:gap-3">
       <div
         className="relative order-first h-8 basis-full cursor-ew-resize touch-none py-3"
         onPointerDown={handleScrubberPointerDown}
@@ -115,7 +115,7 @@ export default function VideoPlaybackControls({
         <option value={1.5}>1.5x</option>
         <option value={2}>2x</option>
       </select>
-      <span className="text-[#7a6040] text-xs font-mono">
+      <span className="min-w-full text-center font-mono text-xs text-[#7a6040] sm:min-w-0 sm:text-left">
         {formatTime(trimmedTime)} / {formatTime(trimmedDuration)}
       </span>
     </div>
