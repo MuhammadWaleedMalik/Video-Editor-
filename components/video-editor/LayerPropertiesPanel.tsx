@@ -65,9 +65,9 @@ export default function LayerPropertiesPanel({
         <div className="flex flex-col gap-3">
           <div className="flex items-center gap-1.5 text-[10px] text-[#7a6040] uppercase font-bold tracking-wider border-b border-[#3d2510]/50 pb-1">
             <Sliders size={11} />
-            <span>Layout &amp; Geometry</span>
+            <span>Layer Details</span>
           </div>
-          <LayerCommonFields layer={layer} duration={duration} onUpdate={onUpdate} />
+          <LayerCommonFields layer={layer} onUpdate={onUpdate} />
         </div>
 
         {layer.type === 'text' ? (
@@ -124,7 +124,7 @@ export default function LayerPropertiesPanel({
           className="w-full flex items-center justify-center gap-2 bg-red-950/45 hover:bg-red-900/60 border border-red-900/60 text-red-300 text-xs font-semibold py-2.5 rounded-lg transition-colors mt-4"
         >
           <Trash2 size={13} />
-          <span>Delete Layer</span>
+          <span>{layer.type === 'text' ? 'Delete Text' : 'Delete Item'}</span>
         </button>
       </div>
     </aside>

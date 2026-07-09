@@ -108,6 +108,35 @@ export default function VideoEditor() {
     setPreviewError('');
   }
 
+  function handleOpenSubtitlePanel() {
+    editor.set({
+      selectedClipId: null,
+      selectedCanvasObjectId: null,
+      selectedLayerId: null,
+    });
+    setMobilePanel('settings');
+  }
+
+  function handleOpenObjectEditor() {
+    setMobilePanel('settings');
+  }
+
+  function handlePlaceAssetFromPanel(id: string) {
+    editor.handlePlaceAsset(id);
+    if (mobilePanel === 'media') setMobilePanel(null);
+  }
+
+  function handlePlaceTextAssetFromPanel(id: string) {
+    editor.handlePlaceTextAsset(id);
+    if (mobilePanel === 'media') setMobilePanel(null);
+  }
+
+  function handleDeleteLayerFromEditor(id: string) {
+    const deletedLayer = editor.state.layers.find((layer) => layer.id === id);
+    editor.handleDeleteLayer(id);
+    if (deletedLayer?.type === 'text') setMobilePanel(null);
+  }
+
   function renderMediaPanel() {
     return (
       <LeftSidebar
@@ -121,9 +150,9 @@ export default function VideoEditor() {
         onVideoUpload={editor.handleVideoUpload}
         onImageUpload={editor.handleImageUpload}
         onAudioUpload={editor.handleAudioUpload}
-        onPlaceAsset={editor.handlePlaceAsset}
+        onPlaceAsset={handlePlaceAssetFromPanel}
         onDeleteAsset={editor.handleDeleteAsset}
-        onPlaceTextAsset={editor.handlePlaceTextAsset}
+        onPlaceTextAsset={handlePlaceTextAssetFromPanel}
         onDeleteTextAsset={editor.handleDeleteTextAsset}
         isUploadingMedia={editor.state.isUploadingMedia}
         uploadError={editor.state.uploadError}
@@ -158,7 +187,7 @@ export default function VideoEditor() {
         onUpdateLayer={editor.handleUpdateLayer}
         onUpdateCanvasObject={editor.handleUpdateCanvasObject}
         onSelectClip={editor.handleSelectClip}
-        onDeleteLayer={editor.handleDeleteLayer}
+        onDeleteLayer={handleDeleteLayerFromEditor}
         onSelectLayer={editor.handleSelectLayer}
       />
     );
@@ -178,7 +207,7 @@ export default function VideoEditor() {
         }}
         onImport={handleImport}
         onMediaOpen={() => setMobilePanel('media')}
-        onEditOpen={() => setMobilePanel('settings')}
+        onEditOpen={handleOpenSubtitlePanel}
       />
 
       <div className="flex-1 overflow-visible overscroll-contain xl:min-h-[720px]">
@@ -219,6 +248,7 @@ export default function VideoEditor() {
               onUpdateLayer={editor.handleUpdateLayer}
               onUpdateCanvasObject={editor.handleUpdateCanvasObject}
               onAddLayerAtCoords={editor.handleAddLayerAtCoords}
+              onOpenObjectEditor={handleOpenObjectEditor}
             />
           </div>
 
@@ -239,10 +269,18 @@ export default function VideoEditor() {
             <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#3d2510] px-4 py-3 pt-[calc(0.75rem+env(safe-area-inset-top))]">
               <div>
                 <p className="text-[10px] font-black uppercase tracking-[0.22em] text-[#7a6040]">
-                  {mobilePanel === 'media' ? 'Assets' : 'Edit'}
+                  {mobilePanel === 'media'
+                    ? 'Assets'
+                    : editor.state.selectedLayerId || editor.state.selectedCanvasObjectId || editor.state.selectedClipId
+                      ? 'Editor'
+                      : 'Subtitle'}
                 </p>
                 <h3 className="text-sm font-bold text-[#f2d40b]">
-                  {mobilePanel === 'media' ? 'Media Library' : 'Settings & Subtitles'}
+                  {mobilePanel === 'media'
+                    ? 'Media Library'
+                    : editor.state.selectedLayerId || editor.state.selectedCanvasObjectId || editor.state.selectedClipId
+                      ? 'Object Editor'
+                      : 'Subtitles'}
                 </h3>
               </div>
               <button
@@ -284,7 +322,6 @@ export default function VideoEditor() {
         onClipOrderChange={editor.handleClipOrderChange}
         onToggleClipMute={editor.handleToggleClipMute}
         onDeleteClip={editor.handleDeleteClip}
-        onOpenItemEditor={() => setMobilePanel('settings')}
       />
 
       {showPreviewConfirm ? (

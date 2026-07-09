@@ -35,7 +35,7 @@ export const initialState: EditorState = {
   layers: [],
   selectedLayerId: null,
   mediaAssets: [],
-  textAssets: [DEFAULT_TEXT_ASSET],
+  textAssets: [],
   timelineClips: [],
   canvasObjects: [],
   selectedClipId: null,

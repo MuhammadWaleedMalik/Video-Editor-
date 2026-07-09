@@ -29,6 +29,8 @@ interface LeftSidebarProps {
 const assetThumbnailCache = new Map<string, string>();
 const assetThumbnailRequests = new Map<string, Promise<string>>();
 const MAX_ASSET_THUMBNAIL_CACHE_SIZE = 80;
+const SIDEBAR_LIST_CLASSNAME =
+  'grid max-h-[min(46svh,460px)] grid-cols-1 gap-2 overflow-y-auto overscroll-contain touch-pan-y pr-1 [scrollbar-gutter:stable] [-webkit-overflow-scrolling:touch] scrollbar-thin sm:max-h-[min(54dvh,560px)] xl:max-h-[min(58dvh,640px)]';
 
 function rememberAssetThumbnail(key: string, thumbnail: string) {
   if (assetThumbnailCache.has(key)) assetThumbnailCache.delete(key);
@@ -269,7 +271,7 @@ export default function LeftSidebar({
           <LayerTypeMenu activeType={activeType} onChange={setActiveType} />
         </div>
 
-        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain p-3 scrollbar-thin sm:p-4">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain touch-pan-y p-3 [-webkit-overflow-scrolling:touch] scrollbar-thin sm:p-4">
           <div className="flex items-center justify-between">
             <h3 className="text-xs text-[#7a6040] font-semibold uppercase tracking-wider">
               {activeMeta?.title}
@@ -371,7 +373,7 @@ export default function LeftSidebar({
 
           {isMediaTab ? (
             activeAssets.length ? (
-              <div className="grid grid-cols-1 gap-2">
+              <div className={SIDEBAR_LIST_CLASSNAME}>
                 {activeAssets.map((asset) => {
                   const AssetIcon = asset.type === 'video' ? Film : asset.type === 'image' ? ImageIcon : Music;
                   return (
@@ -445,7 +447,7 @@ export default function LeftSidebar({
               )
             )
           ) : textAssets.length ? (
-            <div className="grid grid-cols-1 gap-2">
+            <div className={SIDEBAR_LIST_CLASSNAME}>
               {textAssets.map((asset) => {
                 const usedInTimeline = usedTextAssetIds.has(asset.id);
                 return (
@@ -508,7 +510,7 @@ export default function LeftSidebar({
               onClick={() => onAddLayer(activeType as LayerType)}
               className="w-full rounded-lg border border-dashed border-[#3d2510] bg-[#241508] text-[#7a6040] hover:border-[#5a4530] hover:text-[#c9b600] p-3 text-sm flex items-center justify-center gap-2"
             >
-              Add your first {activeMeta?.title.toLowerCase().slice(0, -1) || 'item'}
+              + Add text template
             </button>
           )}
         </div>

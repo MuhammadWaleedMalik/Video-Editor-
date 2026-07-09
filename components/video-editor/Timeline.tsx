@@ -28,7 +28,6 @@ interface TimelineProps {
   onClipOrderChange: (id: string, targetIndex: number) => void;
   onToggleClipMute: (id: string) => void;
   onDeleteClip: (id: string) => void;
-  onOpenItemEditor?: () => void;
 }
 
 type DragTarget = 'playhead' | null;
@@ -108,7 +107,6 @@ export default function Timeline({
   onClipOrderChange,
   onToggleClipMute,
   onDeleteClip,
-  onOpenItemEditor,
 }: TimelineProps) {
   const trackAreaRef = useRef<HTMLDivElement>(null);
   const timelineLaneRef = useRef<HTMLDivElement>(null);
@@ -624,7 +622,6 @@ export default function Timeline({
           onDeleteLayer={onDeleteLayer}
           onSplitLayer={onSplitLayer}
           onToggleLayerMute={onToggleLayerMute}
-          onOpenItemEditor={onOpenItemEditor}
           stackDragPreview={stackDragPreview}
         />
       </div>

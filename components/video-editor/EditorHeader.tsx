@@ -103,7 +103,7 @@ export default function EditorHeader({
             className="flex min-h-11 flex-1 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[#5a3b14] bg-[#241508] px-3 py-2 text-sm font-bold text-[#f2d40b] transition-colors hover:border-[#c9b600] hover:bg-[#2d1a08] sm:flex-none sm:px-4 xl:hidden"
           >
             <Captions size={14} />
-            Edit
+            Subtitle
           </button>
         </div>
       </div>

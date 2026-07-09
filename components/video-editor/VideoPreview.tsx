@@ -2,6 +2,7 @@
 
 /* eslint-disable @next/next/no-img-element */
 
+import { Settings2 } from 'lucide-react';
 import { CanvasObject, Layer, LayerType, MediaAsset, SubtitleChunk, TimelineClip, VideoFormat } from '@/types/editor';
 import VideoCanvasStage from './VideoCanvasStage';
 import VideoPlaybackControls from './VideoPlaybackControls';
@@ -38,6 +39,7 @@ interface VideoPreviewProps {
   onUpdateLayer: (layer: Layer) => void;
   onUpdateCanvasObject: (object: CanvasObject) => void;
   onAddLayerAtCoords: (type: Exclude<LayerType, 'audio'>, x: number, y: number) => void;
+  onOpenObjectEditor?: () => void;
 }
 
 export default function VideoPreview({
@@ -71,8 +73,10 @@ export default function VideoPreview({
   onUpdateLayer,
   onUpdateCanvasObject,
   onAddLayerAtCoords,
+  onOpenObjectEditor,
 }: VideoPreviewProps) {
   const hasCanvasContent = timelineClips.length > 0 || layers.some((layer) => Boolean(layer.src) || layer.type !== 'audio');
+  const hasSelectedCanvasItem = Boolean(selectedLayerId || selectedClipId || selectedCanvasObjectId);
   const { refs } = useVideoPreviewController({
     videoRef,
     isPlaying,
@@ -98,7 +102,7 @@ export default function VideoPreview({
   });
 
   return (
-    <div className="flex h-full min-h-0 w-full flex-col gap-2 overflow-hidden p-2 sm:gap-3 sm:p-4">
+    <div className="relative flex h-full min-h-0 w-full flex-col gap-2 overflow-hidden p-2 sm:gap-3 sm:p-4">
       <VideoCanvasStage
         videoRef={videoRef}
         canvasRef={refs.canvasRef}
@@ -123,6 +127,22 @@ export default function VideoPreview({
         onCanvasPointerLeave={refs.handleCanvasPointerLeave}
         containerStyle={refs.containerStyle}
       />
+
+      {hasSelectedCanvasItem && onOpenObjectEditor ? (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onOpenObjectEditor();
+          }}
+          className="absolute right-4 top-4 z-40 flex min-h-10 touch-manipulation items-center gap-1.5 rounded-full border border-[#f2d40b]/50 bg-[#120a02]/92 px-3 text-xs font-black uppercase tracking-[0.08em] text-[#f2d40b] shadow-[0_12px_28px_rgba(0,0,0,0.42),0_0_18px_rgba(242,212,11,0.22)] backdrop-blur transition active:scale-95 xl:hidden"
+          aria-label="Open selected object editor"
+        >
+          <Settings2 size={14} />
+          Edit
+        </button>
+      ) : null}
 
       {hasCanvasContent ? (
         <VideoPlaybackControls

@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, Loader2, Square, Upload, X } from 'lucide-react';
+import { Camera, Loader2, RefreshCcw, Square, Upload, X } from 'lucide-react';
 import { formatTime } from './videoCanvas';
 
 interface BrowserVideoRecorderProps {
@@ -36,6 +36,7 @@ export default function BrowserVideoRecorder({
   const [isOpeningCamera, setIsOpeningCamera] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [error, setError] = useState('');
+  const [facingMode, setFacingMode] = useState<'environment' | 'user'>('environment');
 
   const cleanup = useCallback(() => {
     if (recordLimitTimerRef.current !== null) {
@@ -75,8 +76,8 @@ export default function BrowserVideoRecorder({
     setIsRecording(false);
   }, []);
 
-  const openCamera = useCallback(async () => {
-    if (isOpeningCamera || isReady) return;
+  const openCamera = useCallback(async (nextFacingMode: 'environment' | 'user' = facingMode, replaceCamera = false) => {
+    if (isOpeningCamera || isRecording || (isReady && !replaceCamera)) return;
     if (!navigator.mediaDevices?.getUserMedia) {
       setError('Camera is not available in this browser.');
       return;
@@ -84,9 +85,15 @@ export default function BrowserVideoRecorder({
 
     setError('');
     setIsOpeningCamera(true);
+    if (replaceCamera) {
+      mediaStreamRef.current?.getTracks().forEach((track) => track.stop());
+      mediaStreamRef.current = null;
+      setIsReady(false);
+    }
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: 'environment' },
+        video: { facingMode: { ideal: nextFacingMode } },
         audio: true,
       });
 
@@ -95,13 +102,14 @@ export default function BrowserVideoRecorder({
         videoRef.current.srcObject = stream;
         await videoRef.current.play().catch(() => {});
       }
+      setFacingMode(nextFacingMode);
       setIsReady(true);
     } catch {
       setError('Could not access camera/mic. Please allow permissions.');
     } finally {
       setIsOpeningCamera(false);
     }
-  }, [isOpeningCamera, isReady]);
+  }, [facingMode, isOpeningCamera, isReady, isRecording]);
 
   useEffect(() => {
     if (!isOpen) cleanup();
@@ -228,6 +236,12 @@ export default function BrowserVideoRecorder({
     if (!file || !onBrowse) return;
     onBrowse(file);
     handleClose();
+  }
+
+  function handleSwapCamera() {
+    if (isRecording) return;
+    const nextFacingMode = facingMode === 'environment' ? 'user' : 'environment';
+    void openCamera(nextFacingMode, true);
   }
 
   if (!isOpen) return null;
@@ -361,12 +375,24 @@ export default function BrowserVideoRecorder({
                 {!isReady ? (
                   <button
                     type="button"
-                    onClick={openCamera}
+                    onClick={() => void openCamera()}
                     disabled={isOpeningCamera}
                     className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#c9b600] px-4 text-sm font-bold text-[#1a0c05] hover:bg-[#e0cc00] disabled:cursor-not-allowed disabled:bg-[#3d2510] disabled:text-[#7a6040]"
                   >
                     {isOpeningCamera ? <Loader2 size={15} className="animate-spin" /> : <Camera size={15} />}
                     {isOpeningCamera ? 'Opening camera...' : 'Enable Camera'}
+                  </button>
+                ) : null}
+
+                {isReady ? (
+                  <button
+                    type="button"
+                    onClick={handleSwapCamera}
+                    disabled={isOpeningCamera || isRecording}
+                    className="flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[#3d2510] px-4 text-sm font-semibold text-[#c8b88a] transition hover:border-[#c9b600] hover:text-[#f2d40b] disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isOpeningCamera ? <Loader2 size={15} className="animate-spin" /> : <RefreshCcw size={15} />}
+                    Swap Camera
                   </button>
                 ) : null}
 

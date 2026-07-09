@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 
 import { memo, useCallback, useEffect, useMemo, useState } from 'react';
-import { AudioLines, GripVertical, Scissors, Settings2, Trash2, Volume2, VolumeX } from 'lucide-react';
+import { AudioLines, GripVertical, Scissors, Trash2, Volume2, VolumeX } from 'lucide-react';
 import { CanvasObject, Layer, MediaAsset, TimelineClip } from '@/types/editor';
 import { getTimelineStackItems, MIN_CLIP_DURATION } from './timelineModel';
 import { formatTick, getTimelineMinorTickStep, getTimelineTickStep, getTimelineTicks } from './timelineUtils';
@@ -41,7 +41,6 @@ interface TimelineRowsProps {
   onDeleteLayer: (id: string) => void;
   onSplitLayer: (id: string) => void;
   onToggleLayerMute: (id: string) => void;
-  onOpenItemEditor?: () => void;
   stackDragPreview: {
     kind: 'clip' | 'layer';
     id: string;
@@ -340,7 +339,6 @@ export default function TimelineRows({
   onDeleteLayer,
   onSplitLayer,
   onToggleLayerMute,
-  onOpenItemEditor,
   stackDragPreview,
 }: TimelineRowsProps) {
   const [clipToolbarAnchor, setClipToolbarAnchor] = useState<{ clipId: string; time: number } | null>(null);
@@ -817,27 +815,6 @@ export default function TimelineRows({
                   >
                     <GripVertical size={16} />
                   </button>
-                  <button
-                    type="button"
-                    onPointerDown={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                    }}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      anchorClipToolbar(clip, e.clientX);
-                      onSelectClip(clip.id);
-                      onOpenItemEditor?.();
-                    }}
-                    className={`absolute z-30 flex touch-manipulation items-center justify-center border border-[#f2d40b]/45 bg-[#120a02]/90 text-[#f2d40b] shadow-[0_8px_18px_rgba(0,0,0,0.34)] transition-transform active:scale-95 hover:bg-[#f2d40b] hover:text-[#1a0c05] ${
-                      compactClip ? 'right-1 top-1 h-6 w-6 rounded' : 'right-2 top-2 h-8 w-8 rounded-lg'
-                    }`}
-                    title="Open object editor"
-                    aria-label="Open object editor"
-                  >
-                    <Settings2 size={compactClip ? 13 : 15} />
-                  </button>
                   <div className="relative z-10 h-full min-w-0" />
                 </div>
               );
@@ -899,27 +876,6 @@ export default function TimelineRows({
                   title="Drag to change stack order"
                 >
                   <GripVertical size={16} />
-                </button>
-                <button
-                  type="button"
-                  onPointerDown={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                  }}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    anchorLayerToolbar(layer, e.clientX);
-                    onSelectLayer(layer.id);
-                    onOpenItemEditor?.();
-                  }}
-                  className={`absolute z-30 flex touch-manipulation items-center justify-center border border-[#f2d40b]/45 bg-[#120a02]/90 text-[#f2d40b] shadow-[0_8px_18px_rgba(0,0,0,0.34)] transition-transform active:scale-95 hover:bg-[#f2d40b] hover:text-[#1a0c05] ${
-                    compactLayer ? 'right-1 top-1 h-6 w-6 rounded' : 'right-2 top-2 h-8 w-8 rounded-lg'
-                  }`}
-                  title="Open object editor"
-                  aria-label="Open object editor"
-                >
-                  <Settings2 size={compactLayer ? 13 : 15} />
                 </button>
                 <div
                   className={`${compactLayer ? 'w-2' : 'w-5 sm:w-4'} absolute right-0 top-0 z-10 h-full touch-none cursor-ew-resize bg-[#f2d40b]/70`}

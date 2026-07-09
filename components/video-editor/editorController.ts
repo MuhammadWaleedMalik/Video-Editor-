@@ -123,6 +123,9 @@ export default function useVideoEditorController(): VideoEditorController {
 
     const restoredClips = (restoredDraft.timelineClips ?? []).map(fitClipToTimeline);
     const restoredLayers = (restoredDraft.layers ?? []).map(clampLayerTiming);
+    const restoredTextAssets = (restoredDraft.textAssets ?? []).filter(
+      (asset) => asset.id !== DEFAULT_TEXT_ASSET.id
+    );
     const restoredDuration = Math.max(
       calculateTimelineDuration(restoredClips),
       calculateLayerTimelineDuration(restoredLayers)
@@ -147,7 +150,7 @@ export default function useVideoEditorController(): VideoEditorController {
       format: restoredDraft.format,
       layers: restoredLayers,
       mediaAssets: restoredDraft.mediaAssets ?? [],
-      textAssets: restoredDraft.textAssets?.length ? restoredDraft.textAssets : [DEFAULT_TEXT_ASSET],
+      textAssets: restoredTextAssets,
       timelineClips: restoredClips,
       canvasObjects: (restoredDraft.canvasObjects ?? []).map(clampCanvasObjectRect),
       selectedClipId: restoredDraft.selectedClipId ?? null,
@@ -171,6 +174,29 @@ export default function useVideoEditorController(): VideoEditorController {
     setTranscribeStatus,
     setWaveformData
   );
+
+  function handleUpdateLayer(layer: EditorState['layers'][number]) {
+    layers.handleUpdateLayer(layer);
+    if (layer.type !== 'text' || !layer.assetId) return;
+
+    setState((prev) => ({
+      ...prev,
+      textAssets: prev.textAssets.map((asset) =>
+        asset.id === layer.assetId
+          ? {
+              ...asset,
+              name: layer.name,
+              text: layer.text ?? asset.text,
+              fontSize: layer.fontSize ?? asset.fontSize,
+              fontFamily: layer.fontFamily ?? asset.fontFamily,
+              themeId: layer.themeId ?? asset.themeId,
+              color: layer.color ?? asset.color,
+              bgColor: layer.bgColor ?? asset.bgColor,
+            }
+          : asset
+      ),
+    }));
+  }
 
   function calculateProjectDuration(nextClips: TimelineClip[], nextLayers = state.layers) {
     return Math.max(calculateTimelineDuration(nextClips), calculateLayerTimelineDuration(nextLayers));
@@ -700,7 +726,7 @@ export default function useVideoEditorController(): VideoEditorController {
     handleFormatChange: playback.handleFormatChange,
     handleAddLayer,
     handleAddLayerAtCoords: layers.handleAddLayerAtCoords,
-    handleUpdateLayer: layers.handleUpdateLayer,
+    handleUpdateLayer,
     handleDeleteLayer: layers.handleDeleteLayer,
     handleSelectLayer: layers.handleSelectLayer,
     handleLayerTimingChange: layers.handleLayerTimingChange,

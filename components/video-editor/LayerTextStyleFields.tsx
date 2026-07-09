@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Layer } from '@/types/editor';
-import { TEXT_THEMES, TextTheme } from '@/lib/textThemes';
+import { TEXT_THEMES } from '@/lib/textThemes';
 
 interface LayerTextStyleFieldsProps {
   layer: Layer;
@@ -138,6 +138,12 @@ function ColorPopupField({ label, value, displayValue, onChange }: ColorPopupFie
     commitColor(rgbToHex(nextRgb.r, nextRgb.g, nextRgb.b));
   }
 
+  function handleDone() {
+    const normalized = parseColorInput(colorInput);
+    if (normalized) commitColor(normalized);
+    setOpen(false);
+  }
+
   return (
     <div className="relative flex min-w-0 flex-1 items-center gap-2">
       <button
@@ -179,10 +185,10 @@ function ColorPopupField({ label, value, displayValue, onChange }: ColorPopupFie
               </div>
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={handleDone}
                 className="h-8 rounded-lg border border-[#3d2510] px-3 text-[10px] font-bold text-[#c8b88a] hover:border-[#6f5220]"
               >
-                Close
+                Done
               </button>
             </div>
 
@@ -254,7 +260,23 @@ function ColorPopupField({ label, value, displayValue, onChange }: ColorPopupFie
 }
 
 export default function LayerTextStyleFields({ layer, onUpdate }: LayerTextStyleFieldsProps) {
-  const currentTheme = TEXT_THEMES.find((theme) => theme.id === layer.themeId);
+  const currentTheme = useMemo(
+    () => TEXT_THEMES.find((theme) => theme.id === layer.themeId) ?? TEXT_THEMES[0],
+    [layer.themeId]
+  );
+
+  function applyTheme(themeId: string) {
+    const theme = TEXT_THEMES.find((item) => item.id === themeId);
+    if (!theme) return;
+    onUpdate({
+      ...layer,
+      themeId: theme.id,
+      fontFamily: theme.fontFamily,
+      fontSize: theme.fontSize ?? layer.fontSize ?? 20,
+      color: theme.color ?? layer.color ?? '#ffffff',
+      bgColor: theme.bgColor ?? layer.bgColor ?? '#00000000',
+    });
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -271,37 +293,17 @@ export default function LayerTextStyleFields({ layer, onUpdate }: LayerTextStyle
 
       <div className="flex flex-col gap-1">
         <label className="text-[9px] text-[#5a4530]">Theme</label>
-        <div className="grid grid-cols-1 gap-2 min-[380px]:grid-cols-2">
-          {TEXT_THEMES.map((theme: TextTheme) => {
-            const isActive = layer.fontFamily === theme.fontFamily || layer.themeId === theme.id;
-            return (
-              <button
-                key={theme.id}
-                type="button"
-                onClick={() =>
-                  onUpdate({
-                    ...layer,
-                    themeId: theme.id,
-                    fontFamily: theme.fontFamily,
-                    fontSize: theme.fontSize ?? layer.fontSize ?? 20,
-                    color: theme.color ?? layer.color ?? '#ffffff',
-                    bgColor: theme.bgColor ?? layer.bgColor ?? '#00000000',
-                  })
-                }
-                className={`text-left px-2 py-1.5 rounded-lg border text-[8px] transition-colors ${
-                  isActive
-                    ? 'border-[#c9b600] bg-[#2d1a08] text-[#c9b600]'
-                    : 'border-[#3d2510] bg-[#1f1005] text-[#a89575] hover:border-[#7a6040]'
-                }`}
-              >
-                <span className="block font-semibold text-[9px] text-[#d7c08a]">{theme.name}</span>
-                <span className="block truncate opacity-80" style={{ fontFamily: theme.fontFamily }}>
-                  AaBbCc 012
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        <select
+          value={currentTheme?.id ?? layer.themeId ?? 'inter-clean'}
+          onChange={(event) => applyTheme(event.target.value)}
+          className="min-h-10 w-full rounded-lg border border-[#3d2510] bg-[#1f1005] px-3 py-2 text-xs text-[#e8d5a0] outline-none focus:border-[#c9b600]"
+        >
+          {TEXT_THEMES.map((theme) => (
+            <option key={theme.id} value={theme.id}>
+              {theme.name}
+            </option>
+          ))}
+        </select>
         <p className="text-[8px] text-[#6a5036]">
           Active: <span style={{ fontFamily: currentTheme?.fontFamily || layer.fontFamily || 'Inter' }}>AaBbCc123</span>
         </p>
